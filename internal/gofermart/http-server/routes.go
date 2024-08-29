@@ -6,12 +6,14 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/http-server/handlers/api/user/balance"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
 // RegisterRoutes регистрирует роуты приложения
 func RegisterRoutes(r *chi.Mux, cfg *domain.Config, logger *zap.Logger) {
 	authService := services.NewAuthService([]byte(cfg.JWTSecret), logger)
+	r.Use(middleware.Compress(5, "gzip", "deflate"))
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/user", func(r chi.Router) {
