@@ -2,7 +2,7 @@ package services
 
 import (
 	"errors"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"sync"
@@ -15,19 +15,16 @@ type (
 	AuthService struct {
 		users      map[string]string
 		usersMutex sync.Mutex
-		jwtSecret  []byte
+		tokenAuth  *jwtauth.JWTAuth
 		logger     *zap.Logger
-	}
-	Claims struct {
-		Username string `json:"username"`
-		jwt.RegisteredClaims
 	}
 )
 
 func NewAuthService(jwtSecret []byte, logger *zap.Logger) *AuthService {
+	tokenAuth := jwtauth.New("HS256", jwtSecret, nil)
 	return &AuthService{
 		users:     make(map[string]string),
-		jwtSecret: jwtSecret,
+		tokenAuth: tokenAuth,
 		logger:    logger,
 	}
 }
@@ -78,13 +75,14 @@ func (s *AuthService) AuthenticateUser(login, password string) (bool, error) {
 
 func (s *AuthService) GenerateJWT(username string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
-	claims := &Claims{
-		Username: username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-		},
-	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.jwtSecret)
+	_, tokenString, err := s.tokenAuth.Encode(map[string]interface{}{
+		"username": username,
+		"exp":      expirationTime,
+	})
+	return tokenString, err
+}
+
+func (s *AuthService) GetTokenAuth() *jwtauth.JWTAuth {
+	return s.tokenAuth
 }
