@@ -10,6 +10,7 @@ var (
 	FlagAccrualSystemAddress string
 	FlagDatabaseURI          string
 	FlagRunAddress           string
+	FlagJWTSecret            string
 	configEnv                = domain.Config{}
 )
 
@@ -18,6 +19,7 @@ func parseFlags() {
 	flag.StringVar(&FlagAccrualSystemAddress, "r", "http://localhost:8080", "Address of the accrual settlement system")
 	flag.StringVar(&FlagDatabaseURI, "d", "", "PostgreSQL DSN")
 	flag.StringVar(&FlagRunAddress, "a", "localhost:8080", "Address and port to run the HTTP server")
+	flag.StringVar(&FlagJWTSecret, "s", "your-256-bit-secret-key", "Your JWT-secret key")
 	flag.Parse()
 }
 
@@ -54,6 +56,7 @@ func LoadConfig() (*domain.Config, error) {
 	config.AccrualSystemAddress = selectCfgFromSource(&FlagAccrualSystemAddress, &configEnv.AccrualSystemAddress)
 	config.DatabaseURI = selectCfgFromSource(&FlagDatabaseURI, &configEnv.DatabaseURI)
 	config.RunAddress = selectCfgFromSource(&FlagRunAddress, &configEnv.RunAddress)
+	config.JWTSecret = selectCfgFromSource(&FlagRunAddress, &configEnv.JWTSecret)
 
 	return config, nil
 }
