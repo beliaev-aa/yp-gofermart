@@ -2,8 +2,10 @@ package user
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
+	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"encoding/json"
+	"errors"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -30,7 +32,7 @@ func (h *RegisterPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.authService.RegisterUser(req.Login, req.Password); err != nil {
-		if err.Error() == services.ErrorLoginAlreadyExist {
+		if errors.Is(err, gofermartErrors.ErrLoginAlreadyExists) {
 			h.logger.Warn("Registration failed", zap.String("login", req.Login))
 			http.Error(w, "login already exist", http.StatusConflict)
 		} else {

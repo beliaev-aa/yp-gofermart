@@ -1,22 +1,52 @@
 package balance
 
-import "net/http"
+import (
+	"beliaev-aa/yp-gofermart/internal/gofermart/services"
+	"encoding/json"
+	"net/http"
 
-type IndexGetHandler struct{}
+	"github.com/go-chi/jwtauth/v5"
+	"go.uber.org/zap"
+)
 
-// BalanceGetResponse описывает структуру ответа метода GET /api/user/balance
-type BalanceGetResponse struct {
-	Current   float32 `json:"current"`
-	Withdrawn float32 `json:"withdrawn"`
+type IndexGetHandler struct {
+	userService *services.UserService
+	logger      *zap.Logger
 }
 
-func NewIndexGetHandler() *IndexGetHandler {
-	return &IndexGetHandler{}
+func NewIndexGetHandler(userService *services.UserService, logger *zap.Logger) *IndexGetHandler {
+	return &IndexGetHandler{
+		userService: userService,
+		logger:      logger,
+	}
 }
 
-// ServeHTTP обрабатывает HTTP-запросы для получения текущего баланса счёта баллов лояльности пользователя.
-func (h *IndexGetHandler) ServeHTTP(_ http.ResponseWriter, _ *http.Request) {
-	// 200 — успешная обработка запроса.
-	// 401 — пользователь не авторизован.
-	// 500 — внутренняя ошибка сервера.
+type IndexGetResponse struct {
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
+}
+
+func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	login, ok := claims["username"].(string)
+	if !ok {
+		h.logger.Warn("Unauthorized access attempt")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	balance, err := h.userService.GetBalance(login)
+	if err != nil {
+		h.logger.Error("Failed to get balance", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	response := IndexGetResponse{
+		Current:   balance.Current,
+		Withdrawn: balance.Withdrawn,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

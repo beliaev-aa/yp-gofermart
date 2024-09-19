@@ -1,43 +1,38 @@
 package services
 
 import (
+	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
+	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
+	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
 	"errors"
 	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
-	"sync"
 	"time"
 )
 
-const ErrorLoginAlreadyExist = "login already exist"
+type AuthService struct {
+	tokenAuth *jwtauth.JWTAuth
+	logger    *zap.Logger
+	storage   storage.Storage
+}
 
-type (
-	AuthService struct {
-		users      map[string]string
-		usersMutex sync.Mutex
-		tokenAuth  *jwtauth.JWTAuth
-		logger     *zap.Logger
-	}
-)
-
-func NewAuthService(jwtSecret []byte, logger *zap.Logger) *AuthService {
+func NewAuthService(jwtSecret []byte, logger *zap.Logger, storage storage.Storage) *AuthService {
 	tokenAuth := jwtauth.New("HS256", jwtSecret, nil)
 	return &AuthService{
-		users:     make(map[string]string),
 		tokenAuth: tokenAuth,
 		logger:    logger,
+		storage:   storage,
 	}
 }
 
 func (s *AuthService) RegisterUser(login, password string) error {
 	s.logger.Info("Attempting to register user", zap.String("login", login))
 
-	s.usersMutex.Lock()
-	defer s.usersMutex.Unlock()
-
-	if _, exists := s.users[login]; exists {
+	user, _ := s.storage.GetUserByLogin(login)
+	if user != nil {
 		s.logger.Warn("Login already taken", zap.String("login", login))
-		return errors.New(ErrorLoginAlreadyExist)
+		return gofermartErrors.ErrLoginAlreadyExists
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -46,7 +41,13 @@ func (s *AuthService) RegisterUser(login, password string) error {
 		return err
 	}
 
-	s.users[login] = string(hashedPassword)
+	url := &domain.User{Login: login, Password: string(hashedPassword)}
+	err = s.storage.SaveUser(*url)
+	if err != nil {
+		s.logger.Error("Error registering user", zap.String("login", login), zap.Error(err))
+		return err
+	}
+
 	s.logger.Info("User registered successfully", zap.String("login", login))
 	return nil
 }
@@ -54,16 +55,22 @@ func (s *AuthService) RegisterUser(login, password string) error {
 func (s *AuthService) AuthenticateUser(login, password string) (bool, error) {
 	s.logger.Info("Attempting to authenticate user", zap.String("login", login))
 
-	s.usersMutex.Lock()
-	defer s.usersMutex.Unlock()
+	user, err := s.storage.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, gofermartErrors.ErrUserNotFound) {
+			s.logger.Warn("User not found", zap.String("login", login))
+			return false, nil
+		}
+		s.logger.Error("Error getting user", zap.Error(err))
+		return false, err
+	}
 
-	hashedPassword, exists := s.users[login]
-	if !exists {
+	if user == nil {
 		s.logger.Warn("Login not found", zap.String("login", login))
 		return false, nil
 	}
 
-	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		s.logger.Warn("Invalid password", zap.String("login", login))
 		return false, nil

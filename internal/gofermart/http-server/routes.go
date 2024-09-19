@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/http-server/handlers/api/user"
 	"beliaev-aa/yp-gofermart/internal/gofermart/http-server/handlers/api/user/balance"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
@@ -12,27 +11,26 @@ import (
 )
 
 // RegisterRoutes регистрирует роуты приложения
-func RegisterRoutes(r *chi.Mux, cfg *domain.Config, logger *zap.Logger) {
-	authService := services.NewAuthService([]byte(cfg.JWTSecret), logger)
-	JWTAuth := authService.GetTokenAuth()
+func RegisterRoutes(r *chi.Mux, appServices *services.AppServices, logger *zap.Logger) {
+	JWTAuth := appServices.AuthService.GetTokenAuth()
 	r.Use(middleware.Compress(5, "gzip", "deflate"))
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/user", func(r chi.Router) {
-			r.Post("/register", user.NewRegisterPostHandler(authService, logger).ServeHTTP)
-			r.Post("/login", user.NewLoginPostHandler(authService, logger).ServeHTTP)
+			r.Post("/register", user.NewRegisterPostHandler(appServices.AuthService, logger).ServeHTTP)
+			r.Post("/login", user.NewLoginPostHandler(appServices.AuthService, logger).ServeHTTP)
 
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(JWTAuth))
 				r.Use(jwtauth.Authenticator(JWTAuth))
 
-				r.Post("/orders", user.NewOrdersPostHandler().ServeHTTP)
-				r.Get("/orders", user.NewOrdersGetHandler().ServeHTTP)
+				r.Post("/orders", user.NewOrdersPostHandler(appServices.OrderService, logger).ServeHTTP)
+				r.Get("/orders", user.NewOrdersGetHandler(appServices.OrderService, logger).ServeHTTP)
 				r.Route("/balance", func(r chi.Router) {
-					r.Get("/", balance.NewIndexGetHandler().ServeHTTP)
-					r.Post("/withdraw", balance.NewWithdrawPostHandler().ServeHTTP)
+					r.Get("/", balance.NewIndexGetHandler(appServices.UserService, logger).ServeHTTP)
+					r.Post("/withdraw", balance.NewWithdrawPostHandler(appServices.UserService, logger).ServeHTTP)
 				})
-				r.Get("/withdrawals", user.NewWithdrawalsGetHandler().ServeHTTP)
+				r.Get("/withdrawals", user.NewWithdrawalsGetHandler(appServices.UserService, logger).ServeHTTP)
 			})
 		})
 	})
