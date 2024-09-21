@@ -14,7 +14,7 @@ type StorePostgres struct {
 	logger *zap.Logger
 }
 
-func NewPostgresStorage(dsn string, logger *zap.Logger) (*StorePostgres, error) {
+func NewStorage(dsn string, logger *zap.Logger) (Storage, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		logger.Error("Failed to open database connection", zap.Error(err))
@@ -170,7 +170,12 @@ func (s *StorePostgres) GetWithdrawalsByUserID(userID int) ([]domain.Withdrawal,
 		s.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			s.logger.Error("Failed to close rows", zap.Error(err))
+		}
+	}(rows)
 
 	var withdrawals []domain.Withdrawal
 	for rows.Next() {
@@ -204,7 +209,12 @@ func (s *StorePostgres) GetOrdersByUserID(userID int) ([]domain.Order, error) {
 		s.logger.Error("Failed to get orders", zap.Error(err))
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			s.logger.Error("Failed to close rows", zap.Error(err))
+		}
+	}(rows)
 
 	var orders []domain.Order
 	for rows.Next() {
@@ -293,7 +303,12 @@ func (s *StorePostgres) GetOrdersForProcessing() ([]domain.Order, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			s.logger.Error("Failed to close rows", zap.Error(err))
+		}
+	}(rows)
 
 	for rows.Next() {
 		var order domain.Order

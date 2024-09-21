@@ -13,20 +13,26 @@ import (
 )
 
 func main() {
+	// Инициализация сервиса логирования
 	logger := utils.NewLogger()
-	cfg, err := config.LoadConfig()
 
+	// Загрузка конфигурации приложения
+	cfg, err := config.LoadConfig()
 	if err != nil {
+		// Завершение работы приложения с ошибкой, если конфигурация не загружена
 		logger.Fatal("Server failed to load configuration.", zap.Error(err))
 	}
 
-	store, err := storage.NewPostgresStorage(cfg.DatabaseURI, logger)
+	// Создание подключения к базе данных
+	store, err := storage.NewStorage(cfg.DatabaseURI, logger)
 	if err != nil {
+		// Завершение работы приложения с ошибкой при подключении к базе данных
 		logger.Fatal("Failed to connect to database.", zap.Error(err))
 	}
-	defer store.Close()
 
+	// Инициализация сервиса для работы с заказами
 	orderService := services.NewOrderService(cfg.AccrualSystemAddress, store, logger)
+
 	// Запуск фонового процесса для обновления статусов заказов
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -35,23 +41,32 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
+				// Обновление статусов заказов каждую секунду
 				orderService.UpdateOrderStatuses()
 			}
 		}
 	}()
 
+	// Создание сервисов приложения: аутентификация, заказы и пользователи
 	appServices := &services.AppServices{
 		AuthService:  services.NewAuthService([]byte(cfg.JWTSecret), logger, store),
 		OrderService: orderService,
 		UserService:  services.NewUserService(store, logger),
 	}
 
+	// Инициализация роутера Chi
 	r := chi.NewRouter()
+
+	// Регистрация маршрутов приложения
 	httpserver.RegisterRoutes(r, appServices, logger)
 
+	// Логирование запуска сервера
 	logger.Info("Starting server on " + cfg.RunAddress)
+
+	// Запуск HTTP-сервера
 	err = http.ListenAndServe(cfg.RunAddress, r)
 	if err != nil {
+		// Завершение работы приложения с ошибкой при старте сервера
 		logger.Fatal("Server failed to start", zap.Error(err))
 	}
 }
