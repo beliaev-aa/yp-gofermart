@@ -76,14 +76,21 @@ func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
 func (s *OrderService) UpdateOrderStatuses() {
 	s.logger.Info("Starting order status update")
 
-	// Получаем заказы со статусами 'NEW' и 'PROCESSING'
-	orders, err := s.storage.GetOrdersByStatuses([]string{domain.OrderStatusNew, domain.OrderStatusProcessing})
+	// Получаем заказы, которые не обрабатываются (processing = FALSE)
+	orders, err := s.storage.GetOrdersForProcessing()
 	if err != nil {
 		s.logger.Error("Failed to fetch orders for status update", zap.Error(err))
 		return
 	}
 
 	for _, order := range orders {
+		// Блокируем заказ для обработки, устанавливаем processing = TRUE
+		err := s.storage.LockOrderForProcessing(order.Number)
+		if err != nil {
+			s.logger.Error("Failed to lock order for processing", zap.String("order", order.Number), zap.Error(err))
+			continue
+		}
+
 		// Обращаемся к внешней системе начисления
 		accrual, status, err := s.fetchOrderAccrual(order.Number)
 		if err != nil {
@@ -108,6 +115,13 @@ func (s *OrderService) UpdateOrderStatuses() {
 				s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
 				continue
 			}
+		}
+
+		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
+		err = s.storage.UnlockOrder(order.Number)
+		if err != nil {
+			s.logger.Error("Failed to unlock order", zap.String("order", order.Number), zap.Error(err))
+			continue
 		}
 	}
 }

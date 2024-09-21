@@ -3,6 +3,7 @@ package user
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"net/http"
@@ -25,6 +26,16 @@ type WithdrawalResponse struct {
 	Order       string  `json:"order"`
 	Sum         float64 `json:"sum"`
 	ProcessedAt string  `json:"processed_at"`
+}
+
+func (w WithdrawalResponse) MarshalJSON() ([]byte, error) {
+	jsonString := fmt.Sprintf(`{"order": "%s", "sum": %.2f, "processed_at": "%s"}`,
+		w.Order,
+		w.Sum,
+		w.ProcessedAt,
+	)
+
+	return []byte(jsonString), nil
 }
 
 func (h *WithdrawalsGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

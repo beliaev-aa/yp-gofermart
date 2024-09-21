@@ -55,8 +55,7 @@ func (s *StorePostgres) initSchema() error {
 			id SERIAL PRIMARY KEY,
 			login TEXT UNIQUE NOT NULL,
 			password TEXT NOT NULL,
-			balance DOUBLE PRECISION DEFAULT 0,
-			withdrawn DOUBLE PRECISION DEFAULT 0
+			balance NUMERIC(18,2) DEFAULT 0
 		);
 		`,
 		`
@@ -64,8 +63,9 @@ func (s *StorePostgres) initSchema() error {
 			number TEXT PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id),
 			status TEXT NOT NULL,
-			accrual DOUBLE PRECISION DEFAULT 0,
-			uploaded_at TIMESTAMP NOT NULL
+			accrual NUMERIC(18,2) DEFAULT 0,
+			uploaded_at TIMESTAMP NOT NULL,
+		    processing BOOLEAN DEFAULT FALSE
 		);
 		`,
 		`
@@ -73,7 +73,7 @@ func (s *StorePostgres) initSchema() error {
 			id SERIAL PRIMARY KEY,
 			order_number TEXT NOT NULL,
 			user_id INTEGER NOT NULL REFERENCES users(id),
-			sum DOUBLE PRECISION NOT NULL,
+			sum NUMERIC(18,2) NOT NULL,
 			processed_at TIMESTAMP NOT NULL
 		);
 		`,
@@ -94,8 +94,8 @@ func (s *StorePostgres) GetUserByLogin(login string) (*domain.User, error) {
 	s.logger.Info("Getting user by login", zap.String("login", login))
 	var user domain.User
 	err := s.db.QueryRow(`
-		SELECT id, login, password, balance, withdrawn FROM users WHERE login = $1
-	`, login).Scan(&user.ID, &user.Login, &user.Password, &user.Balance, &user.Withdrawn)
+		SELECT id, login, password, balance FROM users WHERE login = $1
+	`, login).Scan(&user.ID, &user.Login, &user.Password, &user.Balance)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			s.logger.Warn("User not found", zap.String("login", login))
@@ -281,38 +281,72 @@ func (s *StorePostgres) UpdateOrder(order domain.Order) error {
 	return nil
 }
 
-func (s *StorePostgres) GetOrdersByStatuses(statuses []string) ([]domain.Order, error) {
-	s.logger.Info("Getting orders by statuses", zap.Any("statuses", statuses))
-
+func (s *StorePostgres) GetOrdersForProcessing() ([]domain.Order, error) {
+	var orders []domain.Order
+	// Выбираем заказы, которые еще не обрабатываются (processing = FALSE)
 	query := `
-		SELECT number, user_id, status, accrual, uploaded_at
+		SELECT number, status, accrual, user_id, processing
 		FROM orders
-		WHERE status = ANY($1)
-	`
-
-	rows, err := s.db.Query(query, pq.Array(statuses))
+		WHERE status IN ($1, $2, $3) AND processing = FALSE
+		FOR UPDATE`
+	rows, err := s.db.Query(query, domain.OrderStatusNew, domain.OrderStatusRegistered, domain.OrderStatusProcessing)
 	if err != nil {
-		s.logger.Error("Failed to get orders", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
 
-	var orders []domain.Order
 	for rows.Next() {
-		var o domain.Order
-		err := rows.Scan(&o.Number, &o.UserID, &o.Status, &o.Accrual, &o.UploadedAt)
+		var order domain.Order
+		err := rows.Scan(&order.Number, &order.Status, &order.Accrual, &order.UserID, &order.Processing)
 		if err != nil {
-			s.logger.Error("Failed to scan order", zap.Error(err))
-			continue
+			return nil, err
 		}
-		orders = append(orders, o)
+		orders = append(orders, order)
 	}
 
-	if err = rows.Err(); err != nil {
-		s.logger.Error("Row iteration error", zap.Error(err))
-		return nil, err
-	}
-
-	s.logger.Info("Orders retrieved successfully", zap.Int("count", len(orders)))
 	return orders, nil
+}
+
+func (s *StorePostgres) LockOrderForProcessing(orderNumber string) error {
+	query := `
+		UPDATE orders 
+		SET processing = TRUE 
+		WHERE number = $1`
+	_, err := s.db.Exec(query, orderNumber)
+	return err
+}
+
+func (s *StorePostgres) UnlockOrder(orderNumber string) error {
+	query := `
+		UPDATE orders 
+		SET processing = FALSE 
+		WHERE number = $1`
+	_, err := s.db.Exec(query, orderNumber)
+	return err
+}
+
+func (s *StorePostgres) GetUserBalance(login string) (balance, withdrawal float64, err error) {
+	query := `
+		SELECT 
+			u.balance, 
+			COALESCE(SUM(w.sum), 0) AS total_withdrawals
+		FROM 
+			users u
+		LEFT JOIN 
+			withdrawals w ON u.id = w.user_id
+		WHERE 
+			u.login = $1
+		GROUP BY 
+			u.balance;
+	`
+
+	err = s.db.QueryRow(query, login).Scan(&balance, &withdrawal)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, gofermartErrors.ErrUserNotFound
+		}
+		return 0, 0, err
+	}
+
+	return balance, withdrawal, nil
 }

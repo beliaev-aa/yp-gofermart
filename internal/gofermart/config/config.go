@@ -6,9 +6,7 @@ import (
 	"github.com/caarlos0/env/v10"
 )
 
-var (
-	configEnv = domain.Config{}
-)
+var configEnv = domain.Config{}
 
 func parseFlags() *domain.Config {
 	cfg := &domain.Config{}
@@ -28,7 +26,7 @@ func LoadConfig() (*domain.Config, error) {
 
 	cfgFlags := parseFlags()
 
-	// Приоритет у флагов командной строки
+	// Приоритет у env значений
 	config := &domain.Config{
 		RunAddress:           selectCfgFromSource(&cfgFlags.RunAddress, &configEnv.RunAddress),
 		DatabaseURI:          selectCfgFromSource(&cfgFlags.DatabaseURI, &configEnv.DatabaseURI),
@@ -40,8 +38,8 @@ func LoadConfig() (*domain.Config, error) {
 }
 
 func selectCfgFromSource(cfgFlag, cfgEnv *string) string {
-	if len(*cfgFlag) > 0 {
-		return *cfgFlag
+	if len(*cfgEnv) > 0 {
+		return *cfgEnv
 	}
-	return *cfgEnv
+	return *cfgFlag
 }

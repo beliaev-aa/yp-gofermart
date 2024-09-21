@@ -3,10 +3,10 @@ package balance
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"encoding/json"
-	"net/http"
-
+	"fmt"
 	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
+	"net/http"
 )
 
 type IndexGetHandler struct {
@@ -24,6 +24,10 @@ func NewIndexGetHandler(userService *services.UserService, logger *zap.Logger) *
 type IndexGetResponse struct {
 	Current   float64 `json:"current"`
 	Withdrawn float64 `json:"withdrawn"`
+}
+
+func (r IndexGetResponse) MarshalJSON1() ([]byte, error) {
+	return []byte(fmt.Sprintf(`{"current": %.2f, "withdrawn": %.2f}`, r.Current, r.Withdrawn)), nil
 }
 
 func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -29,7 +29,7 @@ func main() {
 	orderService := services.NewOrderService(cfg.AccrualSystemAddress, store, logger)
 	// Запуск фонового процесса для обновления статусов заказов
 	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
 		for {

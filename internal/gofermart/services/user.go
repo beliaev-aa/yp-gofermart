@@ -27,15 +27,15 @@ type Balance struct {
 }
 
 func (s *UserService) GetBalance(login string) (*Balance, error) {
-	user, err := s.storage.GetUserByLogin(login)
+	userBalance, withdrawn, err := s.storage.GetUserBalance(login)
 	if err != nil {
 		s.logger.Error("Failed to get user", zap.Error(err))
 		return nil, err
 	}
 
 	balance := &Balance{
-		Current:   user.Balance,
-		Withdrawn: user.Withdrawn,
+		Current:   userBalance,
+		Withdrawn: withdrawn,
 	}
 
 	return balance, nil

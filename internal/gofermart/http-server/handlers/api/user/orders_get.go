@@ -4,6 +4,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -29,6 +30,22 @@ type OrderResponse struct {
 	Status     string  `json:"status"`
 	Accrual    float64 `json:"accrual,omitempty"`
 	UploadedAt string  `json:"uploaded_at"`
+}
+
+func (o OrderResponse) MarshalJSON1() ([]byte, error) {
+	var accrualField string
+	if o.Accrual != 0 {
+		accrualField = fmt.Sprintf(`"accrual": %.2f,`, o.Accrual)
+	}
+
+	jsonString := fmt.Sprintf(`{"number": "%s", "status": "%s", %s "uploaded_at": "%s"}`,
+		o.Number,
+		o.Status,
+		accrualField,
+		o.UploadedAt,
+	)
+
+	return []byte(jsonString), nil
 }
 
 // ServeHTTP обрабатывает HTTP-запросы для получения списка загруженных пользователем номеров заказов.

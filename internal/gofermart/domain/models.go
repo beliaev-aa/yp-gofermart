@@ -3,18 +3,18 @@ package domain
 import "time"
 
 const (
-	OrderStatusNew        = "NEW"
-	OrderStatusProcessing = "PROCESSING"
 	OrderStatusInvalid    = "INVALID"
+	OrderStatusNew        = "NEW"
 	OrderStatusProcessed  = "PROCESSED"
+	OrderStatusProcessing = "PROCESSING"
+	OrderStatusRegistered = "REGISTERED"
 )
 
 type User struct {
-	ID        int
-	Login     string
-	Password  string
-	Balance   float64
-	Withdrawn float64
+	ID       int
+	Login    string
+	Password string
+	Balance  float64
 }
 
 type Order struct {
@@ -23,6 +23,7 @@ type Order struct {
 	Status     string
 	Accrual    float64
 	UploadedAt time.Time
+	Processing bool
 }
 
 type Withdrawal struct {
