@@ -3,28 +3,26 @@ package storage
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"database/sql"
 	"errors"
 	"github.com/lib/pq"
 	"go.uber.org/zap"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
+// StorePostgres — структура для работы с базой данных PostgreSQL
 type StorePostgres struct {
-	db     *sql.DB
+	db     *gorm.DB
 	logger *zap.Logger
 }
 
+// NewStorage — создаёт новое хранилище с подключением к PostgreSQL и инициализирует схему базы данных
 func NewStorage(dsn string, logger *zap.Logger) (Storage, error) {
-	db, err := sql.Open("postgres", dsn)
+	// Подключение к базе данных через GORM
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		logger.Error("Failed to open database connection", zap.Error(err))
-		return nil, err
-	}
-
-	// Проверка соединения с базой данных
-	err = db.Ping()
-	if err != nil {
-		logger.Error("Failed to ping database", zap.Error(err))
 		return nil, err
 	}
 
@@ -34,8 +32,7 @@ func NewStorage(dsn string, logger *zap.Logger) (Storage, error) {
 	}
 
 	// Инициализация схемы базы данных
-	err = store.initSchema()
-	if err != nil {
+	if err := store.initSchema(); err != nil {
 		logger.Error("Failed to initialize database schema", zap.Error(err))
 		return nil, err
 	}
@@ -43,61 +40,28 @@ func NewStorage(dsn string, logger *zap.Logger) (Storage, error) {
 	return store, nil
 }
 
+// Close — закрывает подключение к базе данных
 func (s *StorePostgres) Close() error {
-	return s.db.Close()
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }
 
-// Инициализация схемы базы данных
+// initSchema — инициализация схемы базы данных с помощью миграций
 func (s *StorePostgres) initSchema() error {
-	queries := []string{
-		`
-		CREATE TABLE IF NOT EXISTS users (
-			id SERIAL PRIMARY KEY,
-			login TEXT UNIQUE NOT NULL,
-			password TEXT NOT NULL,
-			balance NUMERIC(18,2) DEFAULT 0
-		);
-		`,
-		`
-		CREATE TABLE IF NOT EXISTS orders (
-			number TEXT PRIMARY KEY,
-			user_id INTEGER NOT NULL REFERENCES users(id),
-			status TEXT NOT NULL,
-			accrual NUMERIC(18,2) DEFAULT 0,
-			uploaded_at TIMESTAMP NOT NULL,
-		    processing BOOLEAN DEFAULT FALSE
-		);
-		`,
-		`
-		CREATE TABLE IF NOT EXISTS withdrawals (
-			id SERIAL PRIMARY KEY,
-			order_number TEXT NOT NULL,
-			user_id INTEGER NOT NULL REFERENCES users(id),
-			sum NUMERIC(18,2) NOT NULL,
-			processed_at TIMESTAMP NOT NULL
-		);
-		`,
-	}
-
-	for _, query := range queries {
-		_, err := s.db.Exec(query)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	// Автоматическая миграция схемы для пользователей, заказов и выводов
+	return s.db.AutoMigrate(&domain.User{}, &domain.Order{}, &domain.Withdrawal{})
 }
 
-// GetUserByLogin Получение пользователя по логину
+// GetUserByLogin — получение пользователя по логину
 func (s *StorePostgres) GetUserByLogin(login string) (*domain.User, error) {
 	s.logger.Info("Getting user by login", zap.String("login", login))
 	var user domain.User
-	err := s.db.QueryRow(`
-		SELECT id, login, password, balance FROM users WHERE login = $1
-	`, login).Scan(&user.ID, &user.Login, &user.Password, &user.Balance)
+	err := s.db.Where("login = ?", login).First(&user).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			s.logger.Warn("User not found", zap.String("login", login))
 			return nil, nil
 		}
@@ -108,19 +72,16 @@ func (s *StorePostgres) GetUserByLogin(login string) (*domain.User, error) {
 	return &user, nil
 }
 
-// SaveUser Сохранение нового пользователя
+// SaveUser — сохранение нового пользователя
 func (s *StorePostgres) SaveUser(user domain.User) error {
 	s.logger.Info("Saving new user", zap.String("login", user.Login))
-	_, err := s.db.Exec(`
-        INSERT INTO users (login, password) VALUES ($1, $2)
-    `, user.Login, user.Password)
+	err := s.db.Create(&user).Error
 	if err != nil {
 		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" { // Код ошибки уникального ограничения
-				s.logger.Warn("Login already exists", zap.String("login", user.Login))
-				return gofermartErrors.ErrLoginAlreadyExists
-			}
+		// Проверка на ошибку уникальности (уникальный логин)
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			s.logger.Warn("Login already exists", zap.String("login", user.Login))
+			return gofermartErrors.ErrLoginAlreadyExists
 		}
 		s.logger.Error("Failed to save user", zap.Error(err))
 		return err
@@ -129,12 +90,11 @@ func (s *StorePostgres) SaveUser(user domain.User) error {
 	return nil
 }
 
-// UpdateUserBalance Обновление баланса пользователя
+// UpdateUserBalance — обновление баланса пользователя
 func (s *StorePostgres) UpdateUserBalance(userID int, amount float64) error {
 	s.logger.Info("Updating user balance", zap.Int("userID", userID), zap.Float64("amount", amount))
-	_, err := s.db.Exec(`
-		UPDATE users SET balance = balance + $1 WHERE id = $2
-	`, amount, userID)
+	// Увеличение баланса пользователя
+	err := s.db.Model(&domain.User{}).Where("user_id = ?", userID).Update("balance", gorm.Expr("balance + ?", amount)).Error
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
 		return err
@@ -143,225 +103,149 @@ func (s *StorePostgres) UpdateUserBalance(userID int, amount float64) error {
 	return nil
 }
 
-// AddWithdrawal Добавление записи о выводе средств
+// AddWithdrawal — добавление записи о выводе средств
 func (s *StorePostgres) AddWithdrawal(withdrawal domain.Withdrawal) error {
-	s.logger.Info("Adding withdrawal", zap.Int("userID", withdrawal.UserID), zap.String("order", withdrawal.Order))
-	_, err := s.db.Exec(`
-		INSERT INTO withdrawals (order_number, user_id, sum, processed_at)
-		VALUES ($1, $2, $3, $4)
-	`, withdrawal.Order, withdrawal.UserID, withdrawal.Sum, withdrawal.ProcessedAt)
+	s.logger.Info("Adding withdrawal", zap.Int("userID", withdrawal.UserID), zap.String("order", withdrawal.OrderNumber))
+	err := s.db.Create(&withdrawal).Error
 	if err != nil {
 		s.logger.Error("Failed to add withdrawal", zap.Error(err))
 		return err
 	}
-	s.logger.Info("Withdrawal added successfully", zap.Int("userID", withdrawal.UserID), zap.String("order", withdrawal.Order))
+	s.logger.Info("Withdrawal added successfully", zap.Int("userID", withdrawal.UserID), zap.String("order", withdrawal.OrderNumber))
 	return nil
 }
 
-// GetWithdrawalsByUserID Получение списка выводов пользователя
+// GetWithdrawalsByUserID — получение списка выводов пользователя
 func (s *StorePostgres) GetWithdrawalsByUserID(userID int) ([]domain.Withdrawal, error) {
 	s.logger.Info("Getting withdrawals for user", zap.Int("userID", userID))
-	rows, err := s.db.Query(`
-		SELECT id, order_number, user_id, sum, processed_at
-		FROM withdrawals WHERE user_id = $1
-		ORDER BY processed_at DESC
-	`, userID)
+	var withdrawals []domain.Withdrawal
+	err := s.db.Where("user_id = ?", userID).Order("processed_at desc").Find(&withdrawals).Error
 	if err != nil {
 		s.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err
 	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			s.logger.Error("Failed to close rows", zap.Error(err))
-		}
-	}(rows)
-
-	var withdrawals []domain.Withdrawal
-	for rows.Next() {
-		var w domain.Withdrawal
-		err := rows.Scan(&w.ID, &w.Order, &w.UserID, &w.Sum, &w.ProcessedAt)
-		if err != nil {
-			s.logger.Error("Failed to scan withdrawal", zap.Error(err))
-			continue
-		}
-		withdrawals = append(withdrawals, w)
-	}
-
-	if err = rows.Err(); err != nil {
-		s.logger.Error("Row iteration error", zap.Error(err))
-		return nil, err
-	}
-
 	s.logger.Info("Withdrawals retrieved successfully", zap.Int("userID", userID), zap.Int("count", len(withdrawals)))
 	return withdrawals, nil
 }
 
-// GetOrdersByUserID Получение списка заказов пользователя
+// GetOrdersByUserID — получение списка заказов пользователя
 func (s *StorePostgres) GetOrdersByUserID(userID int) ([]domain.Order, error) {
 	s.logger.Info("Getting orders for user", zap.Int("userID", userID))
-	rows, err := s.db.Query(`
-		SELECT number, user_id, status, accrual, uploaded_at
-		FROM orders WHERE user_id = $1
-		ORDER BY uploaded_at DESC
-	`, userID)
+	var orders []domain.Order
+	err := s.db.Where("user_id = ?", userID).Order("uploaded_at desc").Find(&orders).Error
 	if err != nil {
 		s.logger.Error("Failed to get orders", zap.Error(err))
 		return nil, err
 	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			s.logger.Error("Failed to close rows", zap.Error(err))
-		}
-	}(rows)
-
-	var orders []domain.Order
-	for rows.Next() {
-		var o domain.Order
-		err := rows.Scan(&o.Number, &o.UserID, &o.Status, &o.Accrual, &o.UploadedAt)
-		if err != nil {
-			s.logger.Error("Failed to scan order", zap.Error(err))
-			continue
-		}
-		orders = append(orders, o)
-	}
-
-	if err = rows.Err(); err != nil {
-		s.logger.Error("Row iteration error", zap.Error(err))
-		return nil, err
-	}
-
 	s.logger.Info("Orders retrieved successfully", zap.Int("userID", userID), zap.Int("count", len(orders)))
 	return orders, nil
 }
 
-// AddOrder Добавление нового заказа
+// AddOrder — добавление нового заказа
 func (s *StorePostgres) AddOrder(order domain.Order) error {
-	s.logger.Info("Adding new order", zap.String("number", order.Number), zap.Int("userID", order.UserID))
-	_, err := s.db.Exec(`
-        INSERT INTO orders (number, user_id, status, accrual, uploaded_at)
-        VALUES ($1, $2, $3, $4, $5)
-    `, order.Number, order.UserID, order.Status, order.Accrual, order.UploadedAt)
+	s.logger.Info("Adding new order", zap.String("order_number", order.OrderNumber), zap.Int("userID", order.UserID))
+	// Использование OnConflict для игнорирования дублирующихся заказов
+	err := s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&order).Error
 	if err != nil {
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" { // Код ошибки уникального ограничения
-				s.logger.Warn("Order number already exists", zap.String("number", order.Number))
-				return gofermartErrors.ErrOrderAlreadyExists
-			}
-		}
 		s.logger.Error("Failed to add order", zap.Error(err))
 		return err
 	}
-	s.logger.Info("Order added successfully", zap.String("number", order.Number))
+	s.logger.Info("Order added successfully", zap.String("order_number", order.OrderNumber))
 	return nil
 }
 
-// GetOrderByNumber Получение заказа по номеру
+// GetOrderByNumber — получение заказа по номеру
 func (s *StorePostgres) GetOrderByNumber(number string) (*domain.Order, error) {
-	s.logger.Info("Getting order by number", zap.String("number", number))
+	s.logger.Info("Getting order by number", zap.String("order_number", number))
 	var order domain.Order
-	err := s.db.QueryRow(`
-		SELECT number, user_id, status, accrual, uploaded_at FROM orders WHERE number = $1
-	`, number).Scan(&order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt)
+	err := s.db.Where("order_number = ?", number).First(&order).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			s.logger.Warn("Order not found", zap.String("number", number))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger.Warn("Order not found", zap.String("order_number", number))
 			return nil, nil
 		}
 		s.logger.Error("Failed to get order by number", zap.Error(err))
 		return nil, err
 	}
-	s.logger.Info("Order retrieved successfully", zap.String("number", number))
+	s.logger.Info("Order retrieved successfully", zap.String("order_number", number))
 	return &order, nil
 }
 
-// UpdateOrder Обновление заказа
+// UpdateOrder — обновление данных о заказе
 func (s *StorePostgres) UpdateOrder(order domain.Order) error {
-	s.logger.Info("Updating order", zap.String("number", order.Number))
-	_, err := s.db.Exec(`
-		UPDATE orders SET status = $1, accrual = $2 WHERE number = $3
-	`, order.Status, order.Accrual, order.Number)
+	s.logger.Info("Updating order", zap.String("order_number", order.OrderNumber))
+	err := s.db.Model(&domain.Order{}).Where("order_number = ?", order.OrderNumber).Updates(domain.Order{
+		OrderStatus: order.OrderStatus,
+		Accrual:     order.Accrual,
+	}).Error
 	if err != nil {
 		s.logger.Error("Failed to update order", zap.Error(err))
 		return err
 	}
-	s.logger.Info("Order updated successfully", zap.String("number", order.Number))
+	s.logger.Info("Order updated successfully", zap.String("order_number", order.OrderNumber))
 	return nil
 }
 
+// GetOrdersForProcessing — получение заказов для обработки
 func (s *StorePostgres) GetOrdersForProcessing() ([]domain.Order, error) {
 	var orders []domain.Order
-	// Выбираем заказы, которые еще не обрабатываются (processing = FALSE)
-	query := `
-		SELECT number, status, accrual, user_id, processing
-		FROM orders
-		WHERE status IN ($1, $2, $3) AND processing = FALSE
-		FOR UPDATE`
-	rows, err := s.db.Query(query, domain.OrderStatusNew, domain.OrderStatusRegistered, domain.OrderStatusProcessing)
+	// Получение заказов со статусом для обработки
+	err := s.db.Where("order_status IN ? AND is_processing = ?", []string{
+		domain.OrderStatusNew, domain.OrderStatusRegistered, domain.OrderStatusProcessing}, false).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Find(&orders).Error
 	if err != nil {
+		s.logger.Error("Failed to get orders for processing", zap.Error(err))
 		return nil, err
 	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			s.logger.Error("Failed to close rows", zap.Error(err))
-		}
-	}(rows)
-
-	for rows.Next() {
-		var order domain.Order
-		err := rows.Scan(&order.Number, &order.Status, &order.Accrual, &order.UserID, &order.Processing)
-		if err != nil {
-			return nil, err
-		}
-		orders = append(orders, order)
-	}
-
 	return orders, nil
 }
 
+// LockOrderForProcessing — блокировка заказа для обработки
 func (s *StorePostgres) LockOrderForProcessing(orderNumber string) error {
-	query := `
-		UPDATE orders 
-		SET processing = TRUE 
-		WHERE number = $1`
-	_, err := s.db.Exec(query, orderNumber)
-	return err
-}
-
-func (s *StorePostgres) UnlockOrder(orderNumber string) error {
-	query := `
-		UPDATE orders 
-		SET processing = FALSE 
-		WHERE number = $1`
-	_, err := s.db.Exec(query, orderNumber)
-	return err
-}
-
-func (s *StorePostgres) GetUserBalance(login string) (balance, withdrawal float64, err error) {
-	query := `
-		SELECT 
-			u.balance, 
-			COALESCE(SUM(w.sum), 0) AS total_withdrawals
-		FROM 
-			users u
-		LEFT JOIN 
-			withdrawals w ON u.id = w.user_id
-		WHERE 
-			u.login = $1
-		GROUP BY 
-			u.balance;
-	`
-
-	err = s.db.QueryRow(query, login).Scan(&balance, &withdrawal)
+	err := s.db.Model(&domain.Order{}).
+		Where("order_number = ?", orderNumber).
+		Update("is_processing", true).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		s.logger.Error("Failed to lock order for processing", zap.Error(err))
+	}
+	return err
+}
+
+// UnlockOrder — разблокировка заказа
+func (s *StorePostgres) UnlockOrder(orderNumber string) error {
+	err := s.db.Model(&domain.Order{}).
+		Where("order_number = ?", orderNumber).
+		Update("is_processing", false).Error
+	if err != nil {
+		s.logger.Error("Failed to unlock order", zap.Error(err))
+	}
+	return err
+}
+
+// GetUserBalance — получение баланса и общей суммы выводов пользователя
+func (s *StorePostgres) GetUserBalance(login string) (balance, withdrawal float64, err error) {
+	type Result struct {
+		Balance       float64
+		TotalWithdraw float64
+	}
+
+	var result Result
+	// Получение баланса пользователя и общей суммы выводов через Join
+	err = s.db.Table("users").
+		Select("users.balance, COALESCE(SUM(withdrawals.amount), 0) AS total_withdraw").
+		Joins("LEFT JOIN withdrawals ON users.user_id = withdrawals.user_id").
+		Where("users.login = ?", login).
+		Group("users.balance").
+		Scan(&result).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, 0, gofermartErrors.ErrUserNotFound
 		}
+		s.logger.Error("Failed to get user balance", zap.Error(err))
 		return 0, 0, err
 	}
 
-	return balance, withdrawal, nil
+	return result.Balance, result.TotalWithdraw, nil
 }

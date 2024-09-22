@@ -37,7 +37,7 @@ func (s *OrderService) AddOrder(login, number string) error {
 	}
 
 	if existingOrder != nil {
-		if existingOrder.UserID == user.ID {
+		if existingOrder.UserID == user.UserID {
 			return gofermartErrors.ErrOrderAlreadyUploaded
 		} else {
 			return gofermartErrors.ErrOrderUploadedByAnother
@@ -45,10 +45,10 @@ func (s *OrderService) AddOrder(login, number string) error {
 	}
 
 	order := domain.Order{
-		Number:     number,
-		UserID:     user.ID,
-		Status:     domain.OrderStatusNew,
-		UploadedAt: time.Now(),
+		OrderNumber: number,
+		UserID:      user.UserID,
+		OrderStatus: domain.OrderStatusNew,
+		UploadedAt:  time.Now(),
 	}
 
 	err = s.storage.AddOrder(order)
@@ -65,7 +65,7 @@ func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
 		return nil, err
 	}
 
-	orders, err := s.storage.GetOrdersByUserID(user.ID)
+	orders, err := s.storage.GetOrdersByUserID(user.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,26 +85,26 @@ func (s *OrderService) UpdateOrderStatuses() {
 
 	for _, order := range orders {
 		// Блокируем заказ для обработки, устанавливаем processing = TRUE
-		err := s.storage.LockOrderForProcessing(order.Number)
+		err := s.storage.LockOrderForProcessing(order.OrderNumber)
 		if err != nil {
-			s.logger.Error("Failed to lock order for processing", zap.String("order", order.Number), zap.Error(err))
+			s.logger.Error("Failed to lock order for processing", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
 		}
 
 		// Обращаемся к внешней системе начисления
-		accrual, status, err := s.fetchOrderAccrual(order.Number)
+		accrual, status, err := s.fetchOrderAccrual(order.OrderNumber)
 		if err != nil {
-			s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.Number), zap.Error(err))
+			s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
 		}
 
 		// Обновляем статус и начисление заказа
-		order.Status = status
+		order.OrderStatus = status
 		order.Accrual = accrual
 
 		err = s.storage.UpdateOrder(order)
 		if err != nil {
-			s.logger.Error("Failed to update order", zap.String("order", order.Number), zap.Error(err))
+			s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
 		}
 
@@ -118,9 +118,9 @@ func (s *OrderService) UpdateOrderStatuses() {
 		}
 
 		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
-		err = s.storage.UnlockOrder(order.Number)
+		err = s.storage.UnlockOrder(order.OrderNumber)
 		if err != nil {
-			s.logger.Error("Failed to unlock order", zap.String("order", order.Number), zap.Error(err))
+			s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
 		}
 	}

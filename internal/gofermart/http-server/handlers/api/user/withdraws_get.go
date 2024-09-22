@@ -62,8 +62,8 @@ func (h *WithdrawalsGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	var response []WithdrawalResponse
 	for _, wd := range withdrawals {
 		item := WithdrawalResponse{
-			Order:       wd.Order,
-			Sum:         wd.Sum,
+			Order:       wd.OrderNumber,
+			Sum:         wd.Amount,
 			ProcessedAt: wd.ProcessedAt.Format(time.RFC3339),
 		}
 		response = append(response, item)

@@ -81,11 +81,11 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var response []OrderResponse
 	for _, order := range orders {
 		item := OrderResponse{
-			Number:     order.Number,
-			Status:     order.Status,
+			Number:     order.OrderNumber,
+			Status:     order.OrderStatus,
 			UploadedAt: order.UploadedAt.Format(time.RFC3339),
 		}
-		if order.Status == domain.OrderStatusProcessed {
+		if order.OrderStatus == domain.OrderStatusProcessed {
 			item.Accrual = order.Accrual
 		}
 		response = append(response, item)

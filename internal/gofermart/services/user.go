@@ -53,9 +53,9 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 	}
 
 	withdrawal := domain.Withdrawal{
-		Order:       order,
-		UserID:      user.ID,
-		Sum:         sum,
+		OrderNumber: order,
+		UserID:      user.UserID,
+		Amount:      sum,
 		ProcessedAt: time.Now(),
 	}
 
@@ -65,7 +65,7 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 		return err
 	}
 
-	err = s.storage.UpdateUserBalance(user.ID, -sum)
+	err = s.storage.UpdateUserBalance(user.UserID, -sum)
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
 		return err
@@ -85,7 +85,7 @@ func (s *UserService) GetWithdrawals(login string) ([]domain.Withdrawal, error) 
 		return nil, err
 	}
 
-	withdrawals, err := s.storage.GetWithdrawalsByUserID(user.ID)
+	withdrawals, err := s.storage.GetWithdrawalsByUserID(user.UserID)
 	if err != nil {
 		s.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err
