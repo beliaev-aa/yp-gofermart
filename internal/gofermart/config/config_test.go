@@ -2,7 +2,9 @@ package config
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
+	"flag"
 	"github.com/google/go-cmp/cmp"
+	"os"
 	"testing"
 )
 
@@ -112,5 +114,91 @@ func TestLoadConfig(t *testing.T) {
 				t.Fatalf("Unexpected config (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// Тест для функции parseFlags
+func TestParseFlags(t *testing.T) { // Сбрасываем флаги перед тестом, чтобы избежать повторного объявления
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Сброс флагов для тестов
+	os.Args = []string{"cmd", "-r", "http://test-accrual", "-d", "test-dsn", "-a", "localhost:9000", "-s", "test-secret"}
+
+	// Ожидаемые значения
+	expected := &domain.Config{
+		AccrualSystemAddress: "http://test-accrual",
+		DatabaseURI:          "test-dsn",
+		RunAddress:           "localhost:9000",
+		JWTSecret:            "test-secret",
+	}
+
+	// Парсинг флагов
+	config := parseFlags()
+
+	if diff := cmp.Diff(expected, config); diff != "" {
+		t.Fatalf("Unexpected config (-want +got):\n%s", diff)
+	}
+}
+
+// Тест для функции LoadConfig
+func TestLoadConfigArgs(t *testing.T) {
+	// Сбрасываем флаги перед тестом, чтобы избежать повторного объявления
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Настройка окружения для тестов
+	err := os.Setenv("RUN_ADDRESS", "env-run-address")
+	if err != nil {
+		return
+	}
+	err = os.Setenv("DATABASE_URI", "env-database-uri")
+	if err != nil {
+		return
+	}
+	err = os.Setenv("ACCRUAL_SYSTEM_ADDRESS", "env-accrual-address")
+	if err != nil {
+		return
+	}
+	err = os.Setenv("JWT_SECRET", "env-jwt-secret")
+	if err != nil {
+		return
+	}
+
+	// Сброс флагов для тестов
+	os.Args = []string{"cmd", "-r", "http://flag-accrual", "-d", "flag-dsn", "-a", "localhost:9000", "-s", "flag-secret"}
+
+	// Ожидаемая конфигурация, в которой переменные окружения имеют приоритет
+	expected := &domain.Config{
+		RunAddress:           "env-run-address",
+		DatabaseURI:          "env-database-uri",
+		AccrualSystemAddress: "env-accrual-address",
+		JWTSecret:            "env-jwt-secret",
+	}
+
+	// Загружаем конфигурацию
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig returned an error: %v", err)
+	}
+
+	if diff := cmp.Diff(expected, config); diff != "" {
+		t.Fatalf("Unexpected config (-want +got):\n%s", diff)
+	}
+
+	// Удаляем переменные окружения после теста
+	err = os.Unsetenv("RUN_ADDRESS")
+	if err != nil {
+		return
+	}
+	err = os.Unsetenv("DATABASE_URI")
+	if err != nil {
+		return
+	}
+	err = os.Unsetenv("ACCRUAL_SYSTEM_ADDRESS")
+	if err != nil {
+		return
+	}
+	err = os.Unsetenv("JWT_SECRET")
+	if err != nil {
+		return
 	}
 }
