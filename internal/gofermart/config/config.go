@@ -6,8 +6,7 @@ import (
 	"github.com/caarlos0/env/v10"
 )
 
-var configEnv = domain.Config{}
-
+// parseFlags - парсит флаги и возвращает конфигурацию
 func parseFlags() *domain.Config {
 	cfg := &domain.Config{}
 	flag.StringVar(&cfg.AccrualSystemAddress, "r", "http://localhost:8080", "Address of the accrual settlement system")
@@ -18,28 +17,33 @@ func parseFlags() *domain.Config {
 	return cfg
 }
 
+// LoadConfig - загружает конфигурацию, отдает приоритет переменным окружения
 func LoadConfig() (*domain.Config, error) {
-	err := env.Parse(&configEnv)
+	// Загружаем переменные окружения
+	envConfig := &domain.Config{}
+	err := env.Parse(envConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	cfgFlags := parseFlags()
+	// Загружаем флаги командной строки
+	flagConfig := parseFlags()
 
-	// Приоритет у env значений
-	config := &domain.Config{
-		RunAddress:           selectCfgFromSource(&cfgFlags.RunAddress, &configEnv.RunAddress),
-		DatabaseURI:          selectCfgFromSource(&cfgFlags.DatabaseURI, &configEnv.DatabaseURI),
-		AccrualSystemAddress: selectCfgFromSource(&cfgFlags.AccrualSystemAddress, &configEnv.AccrualSystemAddress),
-		JWTSecret:            selectCfgFromSource(&cfgFlags.JWTSecret, &configEnv.JWTSecret),
+	// Создаем финальную конфигурацию, выбирая значения с приоритетом у переменных окружения
+	finalConfig := &domain.Config{
+		RunAddress:           selectCfgFromSource(flagConfig.RunAddress, envConfig.RunAddress),
+		DatabaseURI:          selectCfgFromSource(flagConfig.DatabaseURI, envConfig.DatabaseURI),
+		AccrualSystemAddress: selectCfgFromSource(flagConfig.AccrualSystemAddress, envConfig.AccrualSystemAddress),
+		JWTSecret:            selectCfgFromSource(flagConfig.JWTSecret, envConfig.JWTSecret),
 	}
 
-	return config, nil
+	return finalConfig, nil
 }
 
-func selectCfgFromSource(cfgFlag, cfgEnv *string) string {
-	if len(*cfgEnv) > 0 {
-		return *cfgEnv
+// selectCfgFromSource - выбирает значение из двух источников
+func selectCfgFromSource(flagValue, envValue string) string {
+	if envValue != "" {
+		return envValue
 	}
-	return *cfgFlag
+	return flagValue
 }
