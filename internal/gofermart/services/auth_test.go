@@ -133,6 +133,16 @@ func TestAuthenticateUser(t *testing.T) {
 			ExpectedError: nil,
 		},
 		{
+			Name: "AuthenticateUser_LoginNotFound",
+			MockReturn: func() (*domain.User, error) {
+				return nil, nil // Хранилище возвращает nil, что имитирует отсутствие пользователя
+			},
+			Login:         "test_user",
+			Password:      "password123",
+			ExpectedAuth:  false,
+			ExpectedError: nil, // Ошибки быть не должно
+		},
+		{
 			Name: "AuthenticateUser_InvalidPassword",
 			MockReturn: func() (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: string(hashedPassword)}, nil
@@ -170,7 +180,6 @@ func TestAuthenticateUser(t *testing.T) {
 				t.Errorf("Expected authenticated %v, got %v", tc.ExpectedAuth, authenticated)
 			}
 
-			// Использование правильной проверки ошибок через сравнение строк
 			if err != nil && tc.ExpectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
 			} else if err == nil && tc.ExpectedError != nil {
