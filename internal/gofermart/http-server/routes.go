@@ -13,7 +13,7 @@ import (
 // RegisterRoutes регистрирует роуты приложения
 func RegisterRoutes(r *chi.Mux, appServices *services.AppServices, logger *zap.Logger) {
 	JWTAuth := appServices.AuthService.GetTokenAuth()
-	r.Use(middleware.Compress(5, "gzip", "deflate"))
+	compressMiddleware := middleware.Compress(5, "gzip", "deflate")
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/user", func(r chi.Router) {
@@ -25,12 +25,12 @@ func RegisterRoutes(r *chi.Mux, appServices *services.AppServices, logger *zap.L
 				r.Use(jwtauth.Authenticator(JWTAuth))
 
 				r.Post("/orders", user.NewOrdersPostHandler(appServices.OrderService, logger).ServeHTTP)
-				r.Get("/orders", user.NewOrdersGetHandler(appServices.OrderService, logger).ServeHTTP)
+				r.With(compressMiddleware).Get("/orders", user.NewOrdersGetHandler(appServices.OrderService, logger).ServeHTTP)
 				r.Route("/balance", func(r chi.Router) {
-					r.Get("/", balance.NewIndexGetHandler(appServices.UserService, logger).ServeHTTP)
+					r.With(compressMiddleware).Get("/", balance.NewIndexGetHandler(appServices.UserService, logger).ServeHTTP)
 					r.Post("/withdraw", balance.NewWithdrawPostHandler(appServices.UserService, logger).ServeHTTP)
 				})
-				r.Get("/withdrawals", user.NewWithdrawalsGetHandler(appServices.UserService, logger).ServeHTTP)
+				r.With(compressMiddleware).Get("/withdrawals", user.NewWithdrawalsGetHandler(appServices.UserService, logger).ServeHTTP)
 			})
 		})
 	})
