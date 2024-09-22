@@ -1,3 +1,5 @@
+[![Coverage Status](https://coveralls.io/repos/github/beliaev-aa/yp-gofermart/badge.svg?branch=master)](https://coveralls.io/github/beliaev-aa/yp-gofermart?branch=master)
+
 # go-musthave-diploma-tpl
 
 Шаблон репозитория для индивидуального дипломного проекта курса «Go-разработчик»
