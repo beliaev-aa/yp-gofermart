@@ -125,6 +125,48 @@ func TestWithdraw(t *testing.T) {
 			Sum:           -10,
 			ExpectedError: gofermartErrors.ErrInvalidWithdrawalAmount,
 		},
+		{
+			Name: "Withdraw_FailedToGetUser",
+			MockReturn: func() (*domain.User, error) {
+				return nil, errors.New("failed to get user")
+			},
+			MockAddWithdrawal: func() error {
+				return nil
+			},
+			MockUpdateBalance: func() error {
+				return nil
+			},
+			Sum:           50,
+			ExpectedError: errors.New("failed to get user"),
+		},
+		{
+			Name: "Withdraw_FailedToAddWithdrawal",
+			MockReturn: func() (*domain.User, error) {
+				return &domain.User{UserID: 1, Balance: 100}, nil
+			},
+			MockAddWithdrawal: func() error {
+				return errors.New("failed to add withdrawal")
+			},
+			MockUpdateBalance: func() error {
+				return nil
+			},
+			Sum:           50,
+			ExpectedError: errors.New("failed to add withdrawal"),
+		},
+		{
+			Name: "Withdraw_FailedToUpdateBalance",
+			MockReturn: func() (*domain.User, error) {
+				return &domain.User{UserID: 1, Balance: 100}, nil
+			},
+			MockAddWithdrawal: func() error {
+				return nil
+			},
+			MockUpdateBalance: func() error {
+				return errors.New("failed to update balance")
+			},
+			Sum:           50,
+			ExpectedError: errors.New("failed to update balance"),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -149,7 +191,7 @@ func TestWithdraw(t *testing.T) {
 				t.Errorf("Expected no error, got %v", err)
 			} else if err == nil && tc.ExpectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && tc.ExpectedError != nil && !errors.Is(err, tc.ExpectedError) {
+			} else if err != nil && tc.ExpectedError != nil && err.Error() != tc.ExpectedError.Error() {
 				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
 			}
 		})
@@ -186,6 +228,28 @@ func TestGetWithdrawals(t *testing.T) {
 			ExpectedError: gofermartErrors.ErrUserNotFound,
 			Expected:      nil,
 		},
+		{
+			Name: "GetWithdrawals_FailedToGetUser",
+			MockReturn: func() (*domain.User, error) {
+				return nil, errors.New("failed to get user")
+			},
+			MockWithdrawals: func() ([]domain.Withdrawal, error) {
+				return nil, nil
+			},
+			ExpectedError: errors.New("failed to get user"),
+			Expected:      nil,
+		},
+		{
+			Name: "GetWithdrawals_FailedToGetWithdrawals",
+			MockReturn: func() (*domain.User, error) {
+				return &domain.User{UserID: 1}, nil
+			},
+			MockWithdrawals: func() ([]domain.Withdrawal, error) {
+				return nil, errors.New("failed to get withdrawals")
+			},
+			ExpectedError: errors.New("failed to get withdrawals"),
+			Expected:      nil,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -207,7 +271,7 @@ func TestGetWithdrawals(t *testing.T) {
 				t.Errorf("Expected no error, got %v", err)
 			} else if err == nil && tc.ExpectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && tc.ExpectedError != nil && !errors.Is(err, tc.ExpectedError) {
+			} else if err != nil && tc.ExpectedError != nil && err.Error() != tc.ExpectedError.Error() {
 				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
 			}
 
