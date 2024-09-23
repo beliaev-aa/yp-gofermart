@@ -11,12 +11,14 @@ import (
 	"strings"
 )
 
+// OrdersPostHandler - представляет HTTP-обработчик для загрузки номера заказа пользователем.
 type OrdersPostHandler struct {
 	logger            *zap.Logger
 	orderService      *services.OrderService
 	usernameExtractor utils.UsernameExtractor
 }
 
+// NewOrdersPostHandler - создает новый экземпляр OrdersPostHandler с указанными зависимостями.
 func NewOrdersPostHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersPostHandler {
 	return &OrdersPostHandler{
 		logger:            logger,
@@ -25,7 +27,7 @@ func NewOrdersPostHandler(orderService *services.OrderService, usernameExtractor
 	}
 }
 
-// ServeHTTP обрабатывает HTTP-запросы для загрузки пользователем номера заказа для расчёта.
+// ServeHTTP - обрабатывает HTTP-запросы POST для загрузки номера заказа.
 func (h *OrdersPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
@@ -33,30 +35,26 @@ func (h *OrdersPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Читаем тело запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
 		h.logger.Warn("Invalid request body", zap.Error(err))
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			h.logger.Error("Failed to close response", zap.Error(err))
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			h.logger.Error("Failed to close request body", zap.Error(err))
 		}
-	}(r.Body)
+	}()
 
 	orderNumber := strings.TrimSpace(string(body))
 
-	// Проверяем формат номера заказа с помощью алгоритма Луна
 	if !utils.IsValidMoon(orderNumber) {
 		h.logger.Warn("Invalid order number format", zap.String("orderNumber", orderNumber))
 		http.Error(w, "Invalid order number format", http.StatusUnprocessableEntity)
 		return
 	}
 
-	// Добавляем заказ
 	err = h.orderService.AddOrder(login, orderNumber)
 	if err != nil {
 		switch {
