@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	// OrdersGetHandler обрабатывает запросы на получение списка загруженных пользователем номеров заказов.
+	// OrdersGetHandler - обрабатывает запросы на получение списка загруженных пользователем номеров заказов.
 	OrdersGetHandler struct {
 		logger            *zap.Logger
 		orderService      *services.OrderService

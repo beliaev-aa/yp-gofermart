@@ -4,17 +4,25 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
-	"fmt"
 	"go.uber.org/zap"
 	"net/http"
 )
 
-type IndexGetHandler struct {
-	logger            *zap.Logger
-	userService       *services.UserService
-	usernameExtractor utils.UsernameExtractor
-}
+type (
+	// IndexGetHandler - представляет HTTP-обработчик для получения текущего баланса пользователя.
+	IndexGetHandler struct {
+		logger            *zap.Logger
+		userService       *services.UserService
+		usernameExtractor utils.UsernameExtractor
+	}
+	// IndexGetResponse - представляет ответ API, содержащий информацию о балансе пользователя.
+	IndexGetResponse struct {
+		Current   float64 `json:"current"`   // Текущий баланс пользователя
+		Withdrawn float64 `json:"withdrawn"` // Общая сумма выведенных средств
+	}
+)
 
+// NewIndexGetHandler - создает новый экземпляр IndexGetHandler с указанными зависимостями.
 func NewIndexGetHandler(userService *services.UserService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *IndexGetHandler {
 	return &IndexGetHandler{
 		logger:            logger,
@@ -23,15 +31,7 @@ func NewIndexGetHandler(userService *services.UserService, usernameExtractor uti
 	}
 }
 
-type IndexGetResponse struct {
-	Current   float64 `json:"current"`
-	Withdrawn float64 `json:"withdrawn"`
-}
-
-func (r IndexGetResponse) MarshalJSON1() ([]byte, error) {
-	return []byte(fmt.Sprintf(`{"current": %.2f, "withdrawn": %.2f}`, r.Current, r.Withdrawn)), nil
-}
-
+// ServeHTTP - обрабатывает HTTP-запросы для получения баланса пользователя.
 func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
