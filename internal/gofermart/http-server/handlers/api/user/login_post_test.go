@@ -5,7 +5,6 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -21,17 +20,17 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 	// Тестовые кейсы
 	testCases := []struct {
 		name               string
-		requestBody        domain.AuthenticationRequest
+		requestBody        string
 		mockGetUserByLogin func(login string) (*domain.User, error)
 		mockGenerateJWT    func(login string) (string, error)
 		expectedStatusCode int
 	}{
 		{
 			name: "Authentication_Failed",
-			requestBody: domain.AuthenticationRequest{
-				Login:    "test_user",
-				Password: "wrong_password",
-			},
+			requestBody: `{
+				"login": "test_user",
+				"password": "wrong_password"
+			}`,
 			mockGetUserByLogin: func(login string) (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: "password123"}, nil
 			},
@@ -39,20 +38,24 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Server_Error_During_Authentication",
-			requestBody: domain.AuthenticationRequest{
-				Login:    "test_user",
-				Password: "password123",
-			},
+			requestBody: `{
+				"login": "test_user",
+				"password": "password123"
+			}`,
 			mockGetUserByLogin: func(login string) (*domain.User, error) {
 				return nil, errors.New("internal error")
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 		},
+		{
+			name:               "Invalid_Request_Format",
+			requestBody:        `{invalid json}`,
+			expectedStatusCode: http.StatusBadRequest,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Создаем мок для storage.Storage
 			mockStorage := &tests.MockStorage{
 				GetUserByLoginFn: tc.mockGetUserByLogin,
 			}
@@ -64,8 +67,7 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 			handler := NewLoginPostHandler(authService, logger)
 
 			// Создаем тело запроса
-			requestBody, _ := json.Marshal(tc.requestBody)
-			req := httptest.NewRequest("POST", "/login", bytes.NewReader(requestBody))
+			req := httptest.NewRequest("POST", "/login", bytes.NewReader([]byte(tc.requestBody)))
 
 			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()

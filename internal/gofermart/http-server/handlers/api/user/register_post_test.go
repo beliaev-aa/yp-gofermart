@@ -6,7 +6,6 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"go.uber.org/zap"
 	"net/http"
@@ -44,40 +43,44 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 	// Тестовые данные
 	testCases := []struct {
 		name               string
-		requestBody        domain.AuthenticationRequest
+		requestBody        string
 		expectedStatusCode int
 	}{
 		{
 			name: "Success_Response",
-			requestBody: domain.AuthenticationRequest{
-				Login:    "new_user",
-				Password: "password123",
-			},
+			requestBody: `{
+				"login": "new_user",
+				"password": "password123"
+			}`,
 			expectedStatusCode: http.StatusOK,
 		},
 		{
 			name: "Login_Already_Exists",
-			requestBody: domain.AuthenticationRequest{
-				Login:    "existing_user",
-				Password: "password123",
-			},
+			requestBody: `{
+				"login": "existing_user",
+				"password": "password123"
+			}`,
 			expectedStatusCode: http.StatusConflict,
 		},
 		{
 			name: "Server_Error",
-			requestBody: domain.AuthenticationRequest{
-				Login:    "server_error",
-				Password: "password123",
-			},
+			requestBody: `{
+				"login": "server_error",
+				"password": "password123"
+			}`,
 			expectedStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:               "Invalid_Request_Format",
+			requestBody:        `{invalid json}`,
+			expectedStatusCode: http.StatusBadRequest,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Создаем тело запроса
-			requestBody, _ := json.Marshal(tc.requestBody)
-			req := httptest.NewRequest("POST", "/register", bytes.NewReader(requestBody))
+			req := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte(tc.requestBody)))
 
 			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
@@ -88,6 +91,10 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 			// Проверяем статус ответа
 			if rr.Code != tc.expectedStatusCode {
 				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
+			}
+
+			if tc.name == "Invalid_Request_Format" && rr.Body.String() != "Invalid request format\n" {
+				t.Errorf("expected error message 'Invalid request format', got %v", rr.Body.String())
 			}
 		})
 	}
