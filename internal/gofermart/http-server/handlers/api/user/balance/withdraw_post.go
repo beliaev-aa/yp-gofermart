@@ -10,12 +10,21 @@ import (
 	"net/http"
 )
 
-type WithdrawPostHandler struct {
-	logger            *zap.Logger
-	userService       *services.UserService
-	usernameExtractor utils.UsernameExtractor
-}
+type (
+	// WithdrawPostHandler - представляет HTTP-обработчик для вывода средств пользователем.
+	WithdrawPostHandler struct {
+		logger            *zap.Logger
+		userService       *services.UserService
+		usernameExtractor utils.UsernameExtractor
+	}
+	// WithdrawPostRequest - представляет структуру запроса на вывод средств.
+	WithdrawPostRequest struct {
+		Order string  `json:"order"`
+		Sum   float64 `json:"sum"`
+	}
+)
 
+// NewWithdrawPostHandler - создает новый экземпляр WithdrawPostHandler.
 func NewWithdrawPostHandler(userService *services.UserService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *WithdrawPostHandler {
 	return &WithdrawPostHandler{
 		logger:            logger,
@@ -24,11 +33,7 @@ func NewWithdrawPostHandler(userService *services.UserService, usernameExtractor
 	}
 }
 
-type WithdrawPostRequest struct {
-	Order string  `json:"order"`
-	Sum   float64 `json:"sum"`
-}
-
+// ServeHTTP - обрабатывает HTTP-запрос POST для вывода средств.
 func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
