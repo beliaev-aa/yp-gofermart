@@ -3,13 +3,33 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"errors"
+	"fmt"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestNewAccrualService(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	baseURL := "https://example.com"
+
+	service := NewAccrualService(baseURL, logger)
+
+	realService, ok := service.(*RealAccrualService)
+	if !ok {
+		t.Fatalf("Expected *RealAccrualService, got %T", service)
+	}
+
+	if realService.BaseURL != baseURL {
+		t.Errorf("Expected BaseURL %v, got %v", baseURL, realService.BaseURL)
+	}
+
+	if realService.logger != logger {
+		t.Errorf("Expected logger %v, got %v", logger, realService.logger)
+	}
+}
 
 // testCase структура для организации тестов
 type testCase struct {
@@ -70,8 +90,17 @@ func TestGetOrderAccrual(t *testing.T) {
 			mockStatusCode:  http.StatusOK,
 			mockResponse:    `{"order":"999999","status":"UNKNOWN","accrual":50.0}`,
 			expectedAccrual: 50.0,
-			expectedStatus:  domain.OrderStatusProcessing, // По умолчанию, если статус неизвестен
+			expectedStatus:  domain.OrderStatusProcessing,
 			expectedError:   nil,
+		},
+		{
+			name:            "Request_Failed",
+			orderNumber:     "invalid_order_number",
+			mockStatusCode:  http.StatusOK,
+			mockResponse:    "",
+			expectedAccrual: 0,
+			expectedStatus:  "",
+			expectedError:   fmt.Errorf("invalid order number: invalid_order_number"), // Обновляем ожидаемую ошибку
 		},
 	}
 
@@ -106,8 +135,10 @@ func TestGetOrderAccrual(t *testing.T) {
 			if status != tc.expectedStatus {
 				t.Errorf("Expected status %v, got %v", tc.expectedStatus, status)
 			}
-			if !errors.Is(err, tc.expectedError) {
-				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
+			if err != nil {
+				if err.Error() != tc.expectedError.Error() {
+					t.Errorf("Expected error %v, got %v", tc.expectedError, err.Error())
+				}
 			}
 		})
 	}
@@ -184,6 +215,30 @@ func TestProcessResponse(t *testing.T) {
 			mockResponse:    `{"order":"123456","status":"PROCESSED"}`, // Исправляем формат
 			expectedAccrual: 0,
 			expectedStatus:  domain.OrderStatusProcessed,
+			expectedError:   nil,
+		},
+		{
+			name:            "Order_Processing",
+			mockStatusCode:  http.StatusOK,
+			mockResponse:    `{"order":"123456","status":"PROCESSING","accrual":0}`,
+			expectedAccrual: 0,
+			expectedStatus:  domain.OrderStatusProcessing,
+			expectedError:   nil,
+		},
+		{
+			name:            "Order_Registered",
+			mockStatusCode:  http.StatusOK,
+			mockResponse:    `{"order":"123456","status":"REGISTERED","accrual":0}`,
+			expectedAccrual: 0,
+			expectedStatus:  domain.OrderStatusProcessing,
+			expectedError:   nil,
+		},
+		{
+			name:            "Order_Invalid",
+			mockStatusCode:  http.StatusOK,
+			mockResponse:    `{"order":"123456","status":"INVALID"}`,
+			expectedAccrual: 0,
+			expectedStatus:  domain.OrderStatusInvalid,
 			expectedError:   nil,
 		},
 	}
