@@ -109,7 +109,7 @@ func TestOrderService_AddOrder(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			accrualMock := &AccrualServiceMock{}
+			accrualMock := &tests.AccrualServiceMock{}
 			mockStorage := &tests.MockStorage{}
 			tc.MockSetup(mockStorage)
 
@@ -177,7 +177,7 @@ func TestOrderService_GetOrders(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			accrualMock := &AccrualServiceMock{}
+			accrualMock := &tests.AccrualServiceMock{}
 			mockStorage := &tests.MockStorage{}
 			tc.MockSetup(mockStorage)
 
@@ -230,7 +230,7 @@ func TestOrderService_UpdateUserBalance(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			accrualMock := &AccrualServiceMock{}
+			accrualMock := &tests.AccrualServiceMock{}
 			mockStorage := &tests.MockStorage{}
 			tc.MockSetup(mockStorage)
 
@@ -252,13 +252,13 @@ func TestOrderService_UpdateUserBalance(t *testing.T) {
 func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 	testCases := []struct {
 		Name          string
-		MockSetup     func(m *tests.MockStorage, accrualMock *AccrualServiceMock)
+		MockSetup     func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock)
 		CheckCalled   func(m *tests.MockStorage) error
 		ExpectedError string
 	}{
 		{
 			Name: "UpdateOrderStatuses_Success",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -300,7 +300,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_GetOrdersForProcessing",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return nil, errors.New("failed to fetch orders")
 				}
@@ -315,7 +315,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_LockOrderForProcessing",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -336,7 +336,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_GetOrderAccrual",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -360,7 +360,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_UpdateOrder",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -390,7 +390,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_UpdateUserBalance",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -426,7 +426,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		},
 		{
 			Name: "UpdateOrderStatuses_Failure_UnlockOrder",
-			MockSetup: func(m *tests.MockStorage, accrualMock *AccrualServiceMock) {
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
 				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
 					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
 				}
@@ -471,7 +471,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			mockStorage := &tests.MockStorage{}
-			accrualMock := &AccrualServiceMock{}
+			accrualMock := &tests.AccrualServiceMock{}
 			tc.MockSetup(mockStorage, accrualMock)
 
 			// Передаем mock в OrderService
@@ -484,13 +484,4 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 			}
 		})
 	}
-}
-
-// AccrualServiceMock - это мок для внешнего сервиса начислений
-type AccrualServiceMock struct {
-	GetOrderAccrualFn func(orderNumber string) (float64, string, error)
-}
-
-func (m *AccrualServiceMock) GetOrderAccrual(orderNumber string) (float64, string, error) {
-	return m.GetOrderAccrualFn(orderNumber)
 }
