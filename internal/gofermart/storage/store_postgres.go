@@ -4,6 +4,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lib/pq"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -144,12 +145,22 @@ func (s *StorePostgres) GetOrdersByUserID(userID int) ([]domain.Order, error) {
 // AddOrder — добавление нового заказа
 func (s *StorePostgres) AddOrder(order domain.Order) error {
 	s.logger.Info("Adding new order", zap.String("order_number", order.OrderNumber), zap.Int("userID", order.UserID))
+
 	// Использование OnConflict для игнорирования дублирующихся заказов
 	err := s.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&order).Error
 	if err != nil {
+		var pgErr *pgconn.PgError
+		// Проверка, является ли ошибка ошибкой Postgres
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" { // Код ошибки уникального ограничения
+				s.logger.Warn("Order number already exists", zap.String("order_number", order.OrderNumber))
+				return gofermartErrors.ErrOrderAlreadyExists
+			}
+		}
 		s.logger.Error("Failed to add order", zap.Error(err))
 		return err
 	}
+
 	s.logger.Info("Order added successfully", zap.String("order_number", order.OrderNumber))
 	return nil
 }
@@ -224,16 +235,11 @@ func (s *StorePostgres) UnlockOrder(orderNumber string) error {
 }
 
 // GetUserBalance — получение баланса и общей суммы выводов пользователя
-func (s *StorePostgres) GetUserBalance(login string) (balance, withdrawal float64, err error) {
-	type Result struct {
-		Balance       float64
-		TotalWithdraw float64
-	}
-
-	var result Result
+func (s *StorePostgres) GetUserBalance(login string) (userBalance *domain.UserBalance, err error) {
+	var result *domain.UserBalance
 	// Получение баланса пользователя и общей суммы выводов через Join
 	err = s.db.Table("users").
-		Select("users.balance, COALESCE(SUM(withdrawals.amount), 0) AS total_withdraw").
+		Select("users.balance AS current, COALESCE(SUM(withdrawals.amount), 0) AS withdrawn").
 		Joins("LEFT JOIN withdrawals ON users.user_id = withdrawals.user_id").
 		Where("users.login = ?", login).
 		Group("users.balance").
@@ -241,11 +247,11 @@ func (s *StorePostgres) GetUserBalance(login string) (balance, withdrawal float6
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, 0, gofermartErrors.ErrUserNotFound
+			return nil, gofermartErrors.ErrUserNotFound
 		}
 		s.logger.Error("Failed to get user balance", zap.Error(err))
-		return 0, 0, err
+		return nil, err
 	}
 
-	return result.Balance, result.TotalWithdraw, nil
+	return result, nil
 }

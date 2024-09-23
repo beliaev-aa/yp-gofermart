@@ -1,6 +1,6 @@
 package domain
 
-// Config описывает конфигурацию приложения
+// Config - описывает конфигурацию приложения
 type Config struct {
 	RunAddress           string `env:"RUN_ADDRESS"`
 	DatabaseURI          string `env:"DATABASE_URI"`

@@ -15,7 +15,7 @@ type MockStorage struct {
 	UpdateUserBalanceFn      func(userID int, amount float64) error
 	LockOrderForProcessingFn func(orderNumber string) error
 	UnlockOrderFn            func(orderNumber string) error
-	GetUserBalanceFn         func(login string) (float64, float64, error)
+	GetUserBalanceFn         func(login string) (userBalance *domain.UserBalance, err error)
 }
 
 func (m *MockStorage) AddOrder(order domain.Order) error {
@@ -66,6 +66,6 @@ func (m *MockStorage) UnlockOrder(orderNumber string) error {
 	return m.UnlockOrderFn(orderNumber)
 }
 
-func (m *MockStorage) GetUserBalance(login string) (float64, float64, error) {
+func (m *MockStorage) GetUserBalance(login string) (userBalance *domain.UserBalance, err error) {
 	return m.GetUserBalanceFn(login)
 }

@@ -25,22 +25,22 @@ func TestNewUserService(t *testing.T) {
 func TestGetBalance(t *testing.T) {
 	testCases := []struct {
 		Name          string
-		MockReturn    func() (float64, float64, error)
+		MockReturn    func() (*domain.UserBalance, error)
 		ExpectedError error
-		Expected      *Balance
+		Expected      *domain.UserBalance
 	}{
 		{
 			Name: "GetBalance_Success",
-			MockReturn: func() (float64, float64, error) {
-				return 100, 50, nil
+			MockReturn: func() (*domain.UserBalance, error) {
+				return &domain.UserBalance{Current: 100, Withdrawn: 50}, nil
 			},
 			ExpectedError: nil,
-			Expected:      &Balance{Current: 100, Withdrawn: 50},
+			Expected:      &domain.UserBalance{Current: 100, Withdrawn: 50},
 		},
 		{
 			Name: "GetBalance_Failure",
-			MockReturn: func() (float64, float64, error) {
-				return 0, 0, errors.New("error")
+			MockReturn: func() (*domain.UserBalance, error) {
+				return nil, errors.New("error")
 			},
 			ExpectedError: errors.New("error"),
 			Expected:      nil,
@@ -50,7 +50,7 @@ func TestGetBalance(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			mockStore := &tests.MockStorage{
-				GetUserBalanceFn: func(login string) (float64, float64, error) {
+				GetUserBalanceFn: func(login string) (userBalance *domain.UserBalance, err error) {
 					return tc.MockReturn()
 				},
 			}

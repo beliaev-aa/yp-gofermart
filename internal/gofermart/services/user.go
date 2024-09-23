@@ -9,18 +9,11 @@ import (
 	"time"
 )
 
-type (
-	// Balance - представляет баланс пользователя, включая текущий баланс и сумму снятий
-	Balance struct {
-		Current   float64
-		Withdrawn float64
-	}
-	// UserService - отвечает за операции с пользователями, включая получение баланса и вывод средств
-	UserService struct {
-		storage storage.Storage
-		logger  *zap.Logger
-	}
-)
+// UserService - отвечает за операции с пользователями, включая получение баланса и вывод средств
+type UserService struct {
+	storage storage.Storage
+	logger  *zap.Logger
+}
 
 // NewUserService - создает новый экземпляр UserService
 func NewUserService(storage storage.Storage, logger *zap.Logger) *UserService {
@@ -31,21 +24,15 @@ func NewUserService(storage storage.Storage, logger *zap.Logger) *UserService {
 }
 
 // GetBalance возвращает текущий баланс пользователя по его логину
-func (s *UserService) GetBalance(login string) (*Balance, error) {
+func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 	// Получаем баланс пользователя и сумму снятых средств из хранилища
-	userBalance, withdrawn, err := s.storage.GetUserBalance(login)
+	userBalance, err := s.storage.GetUserBalance(login)
 	if err != nil {
 		s.logger.Error("Failed to get user balance", zap.Error(err))
 		return nil, err
 	}
 
-	// Формируем и возвращаем структуру с балансом
-	balance := &Balance{
-		Current:   userBalance,
-		Withdrawn: withdrawn,
-	}
-
-	return balance, nil
+	return userBalance, nil
 }
 
 // Withdraw обрабатывает запрос на вывод средств для указанного пользователя и заказа
