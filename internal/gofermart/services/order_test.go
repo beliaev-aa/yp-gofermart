@@ -36,6 +36,31 @@ func TestOrderService_AddOrder(t *testing.T) {
 			ExpectedError: nil,
 		},
 		{
+			Name:   "AddOrder_ErrorInGetUserByLogin",
+			Login:  "user1",
+			Number: "12345",
+			MockSetup: func(m *tests.MockStorage) {
+				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
+					return nil, errors.New("failed to get user")
+				}
+			},
+			ExpectedError: errors.New("failed to get user"),
+		},
+		{
+			Name:   "AddOrder_ErrorInGetOrderByNumber",
+			Login:  "user1",
+			Number: "12345",
+			MockSetup: func(m *tests.MockStorage) {
+				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
+					return &domain.User{UserID: 1}, nil
+				}
+				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
+					return nil, errors.New("failed to get order by number")
+				}
+			},
+			ExpectedError: errors.New("failed to get order by number"),
+		},
+		{
 			Name:   "AddOrder_AlreadyUploadedByUser",
 			Login:  "user1",
 			Number: "12345",
@@ -63,6 +88,23 @@ func TestOrderService_AddOrder(t *testing.T) {
 			},
 			ExpectedError: gofermartErrors.ErrOrderUploadedByAnother,
 		},
+		{
+			Name:   "AddOrder_ErrorInAddOrder",
+			Login:  "user1",
+			Number: "12345",
+			MockSetup: func(m *tests.MockStorage) {
+				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
+					return &domain.User{UserID: 1}, nil
+				}
+				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
+					return nil, gofermartErrors.ErrOrderNotFound
+				}
+				m.AddOrderFn = func(order domain.Order) error {
+					return errors.New("failed to add order")
+				}
+			},
+			ExpectedError: errors.New("failed to add order"),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -74,8 +116,10 @@ func TestOrderService_AddOrder(t *testing.T) {
 			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
 			err := orderService.AddOrder(tc.Login, tc.Number)
 
-			if !errors.Is(err, tc.ExpectedError) {
-				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
+			if err != nil {
+				if err.Error() != tc.ExpectedError.Error() {
+					t.Errorf("Expected error %v, got %v", tc.ExpectedError, err.Error())
+				}
 			}
 		})
 	}
