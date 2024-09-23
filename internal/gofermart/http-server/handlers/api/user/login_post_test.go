@@ -16,7 +16,6 @@ import (
 func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Тестовые кейсы
 	testCases := []struct {
 		name               string
 		requestBody        string
@@ -59,27 +58,20 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 				GetUserByLoginFn: tc.mockGetUserByLogin,
 			}
 
-			// Создаем AuthService через конструктор
 			authService := services.NewAuthService([]byte("secret"), logger, mockStorage)
 
-			// Создаем тестируемый обработчик
 			handler := NewLoginPostHandler(authService, logger)
 
-			// Создаем тело запроса
 			req := httptest.NewRequest("POST", "/login", bytes.NewReader([]byte(tc.requestBody)))
 
-			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
 
-			// Вызываем ServeHTTP
 			handler.ServeHTTP(rr, req)
 
-			// Проверяем статус ответа
 			if rr.Code != tc.expectedStatusCode {
 				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
 			}
 
-			// Проверяем, что заголовок авторизации начинается с "Bearer ", если статус OK
 			if tc.expectedStatusCode == http.StatusOK {
 				authHeader := rr.Header().Get("Authorization")
 				if !strings.HasPrefix(authHeader, "Bearer ") {

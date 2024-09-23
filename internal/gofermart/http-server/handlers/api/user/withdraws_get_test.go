@@ -16,7 +16,6 @@ import (
 func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Mock data для выводов
 	testWithdrawals := []domain.Withdrawal{
 		{
 			OrderNumber: "123456",
@@ -25,13 +24,11 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 
-	// Mock data для пользователя
 	testUser := &domain.User{
 		UserID: 1,
 		Login:  "test_user",
 	}
 
-	// Test cases
 	testCases := []struct {
 		name               string
 		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
@@ -82,12 +79,10 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Используем mock для UsernameExtractor
 			mockExtractor := &tests.MockUsernameExtractor{
 				ExtractFn: tc.mockExtractFn,
 			}
 
-			// Создаем mock UserService с реализацией GetUserByLogin
 			mockUserService := services.NewUserService(&tests.MockStorage{
 				GetUserByLoginFn: func(login string) (*domain.User, error) {
 					if login == "test_user" {
@@ -100,24 +95,18 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 				},
 			}, logger)
 
-			// Создаем тестируемый обработчик
 			handler := NewWithdrawalsGetHandler(mockUserService, mockExtractor, logger)
 
-			// Создаем запрос
 			req := httptest.NewRequest("GET", "/withdrawals", nil)
 
-			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
 
-			// Вызываем ServeHTTP
 			handler.ServeHTTP(rr, req)
 
-			// Проверяем статус ответа
 			if rr.Code != tc.expectedStatusCode {
 				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
 			}
 
-			// Если ожидается JSON-ответ, проверяем его
 			if tc.expectedStatusCode == http.StatusOK {
 				var gotResponse []WithdrawalResponse
 				err := json.NewDecoder(rr.Body).Decode(&gotResponse)
@@ -125,7 +114,6 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 					t.Errorf("failed to decode response: %v", err)
 				}
 
-				// Сравниваем ожидаемый и фактический ответ
 				if len(gotResponse) != len(tc.expectedResponse) {
 					t.Errorf("expected response length %d, got %d", len(tc.expectedResponse), len(gotResponse))
 				}

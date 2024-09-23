@@ -16,7 +16,6 @@ import (
 func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Test cases
 	testCases := []struct {
 		name               string
 		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
@@ -77,15 +76,12 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Используем mock для UsernameExtractor
 			mockExtractor := &tests.MockUsernameExtractor{
 				ExtractFn: tc.mockExtractFn,
 			}
 
-			// Создаем mock OrderService с реализацией GetOrders и GetUserByLogin
 			mockOrderService := services.NewOrderService(accrualMock, &tests.MockStorage{
 				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					// В данном случае возвращаем валидного пользователя
 					return &domain.User{UserID: 1}, nil
 				},
 				GetOrdersByUserIDFn: func(userID int) ([]domain.Order, error) {
@@ -93,24 +89,18 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 				},
 			}, logger)
 
-			// Создаем тестируемый обработчик
 			handler := NewOrdersGetHandler(mockOrderService, mockExtractor, logger)
 
-			// Создаем запрос
 			req := httptest.NewRequest("GET", "/orders", nil)
 
-			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
 
-			// Вызываем ServeHTTP
 			handler.ServeHTTP(rr, req)
 
-			// Проверяем статус ответа
 			if rr.Code != tc.expectedStatusCode {
 				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
 			}
 
-			// Если ожидается JSON-ответ, проверяем его
 			if tc.expectedStatusCode == http.StatusOK {
 				var gotResponse []OrderResponse
 				err := json.NewDecoder(rr.Body).Decode(&gotResponse)
@@ -118,7 +108,6 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 					t.Errorf("failed to decode response: %v", err)
 				}
 
-				// Сравниваем ожидаемый и фактический ответ
 				if len(gotResponse) != len(tc.expectedResponse) {
 					t.Errorf("expected response length %d, got %d", len(tc.expectedResponse), len(gotResponse))
 				}

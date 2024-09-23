@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// testCase структура для организации тестов
 type testCase struct {
 	name            string
 	orderNumber     string
@@ -42,11 +41,9 @@ func TestNewAccrualService(t *testing.T) {
 	}
 }
 
-// TestGetOrderAccrual тестирует основной метод GetOrderAccrual
 func TestGetOrderAccrual(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Список тестовых случаев
 	testCases := []testCase{
 		{
 			name:            "Valid_Processed_Order",
@@ -95,7 +92,7 @@ func TestGetOrderAccrual(t *testing.T) {
 		},
 		{
 			name:            "Failed_to_Create_New_Request",
-			orderNumber:     "\x7f", // Некорректный символ в номере заказа
+			orderNumber:     "\x7f",
 			expectedAccrual: 0,
 			expectedStatus:  "",
 			expectedError:   errors.New("invalid control character in URL"),
@@ -104,7 +101,7 @@ func TestGetOrderAccrual(t *testing.T) {
 			name:            "Failed_to_Decode_JSON_Response",
 			orderNumber:     "invalid_json",
 			mockStatusCode:  http.StatusOK,
-			mockResponse:    `{"order":"123456","status":123}`, // Некорректный тип данных для статуса
+			mockResponse:    `{"order":"123456","status":123}`,
 			expectedAccrual: 0,
 			expectedStatus:  "",
 			expectedError:   errors.New("json: cannot unmarshal number into Go struct field"),
@@ -118,13 +115,10 @@ func TestGetOrderAccrual(t *testing.T) {
 		},
 	}
 
-	// Проходим по каждому тестовому случаю
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Создаем mock-сервер
 			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tc.orderNumber == "request_error" {
-					// Симулируем сбой выполнения запроса
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
@@ -139,7 +133,6 @@ func TestGetOrderAccrual(t *testing.T) {
 			defer mockServer.Close()
 
 			accrualURL := mockServer.URL
-			// Инициализация сервиса с mock-адресом
 			if tc.name == "Invalid_URL_Request" {
 				accrualURL = "invalid-url"
 			}
@@ -149,10 +142,8 @@ func TestGetOrderAccrual(t *testing.T) {
 				logger:  logger,
 			}
 
-			// Вызываем тестируемый метод
 			accrual, status, err := service.GetOrderAccrual(tc.orderNumber)
 
-			// Проверяем результат
 			if accrual != tc.expectedAccrual {
 				t.Errorf("Expected accrual %v, got %v", tc.expectedAccrual, accrual)
 			}
@@ -172,7 +163,6 @@ func TestGetOrderAccrual(t *testing.T) {
 	}
 }
 
-// TestProcessResponse - тестирует логику обработки ответа в GetOrderAccrual
 func TestProcessResponse(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -190,7 +180,7 @@ func TestProcessResponse(t *testing.T) {
 			name:            "Invalid_JSON_Response",
 			orderNumber:     "123456",
 			mockStatusCode:  http.StatusOK,
-			mockResponse:    `{"order":"123456","status":"PROCESSED"}`, // Неполный ответ
+			mockResponse:    `{"order":"123456","status":"PROCESSED"}`,
 			expectedAccrual: 0,
 			expectedStatus:  domain.OrderStatusProcessed,
 			expectedError:   nil,
@@ -229,16 +219,13 @@ func TestProcessResponse(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			// Инициализация сервиса с mock-адресом
 			service := &RealAccrualService{
 				BaseURL: mockServer.URL,
 				logger:  logger,
 			}
 
-			// Вызываем метод для получения данных
 			accrual, status, err := service.GetOrderAccrual(tc.orderNumber)
 
-			// Проверяем результат
 			if accrual != tc.expectedAccrual {
 				t.Errorf("Expected accrual %v, got %v", tc.expectedAccrual, accrual)
 			}

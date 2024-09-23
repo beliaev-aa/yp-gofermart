@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// Тестирование метода AddOrder
 func TestOrderService_AddOrder(t *testing.T) {
 	testCases := []struct {
 		Name          string
@@ -125,13 +124,12 @@ func TestOrderService_AddOrder(t *testing.T) {
 	}
 }
 
-// Тестирование метода GetOrders
 func TestOrderService_GetOrders(t *testing.T) {
 	testCases := []struct {
 		Name           string
 		Login          string
 		MockSetup      func(m *tests.MockStorage)
-		ExpectedError  string // Изменено для сравнения текста ошибки
+		ExpectedError  string
 		ExpectedOrders []domain.Order
 	}{
 		{
@@ -195,14 +193,13 @@ func TestOrderService_GetOrders(t *testing.T) {
 	}
 }
 
-// Тестирование метода UpdateUserBalance
 func TestOrderService_UpdateUserBalance(t *testing.T) {
 	testCases := []struct {
 		Name          string
 		UserID        int
 		Amount        float64
 		MockSetup     func(m *tests.MockStorage)
-		ExpectedError string // Изменено для сравнения текстов ошибок
+		ExpectedError string
 	}{
 		{
 			Name:   "UpdateUserBalance_Success",
@@ -248,7 +245,6 @@ func TestOrderService_UpdateUserBalance(t *testing.T) {
 	}
 }
 
-// Тестирование метода UpdateOrderStatuses
 func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 	testCases := []struct {
 		Name          string
@@ -474,11 +470,9 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 			accrualMock := &tests.AccrualServiceMock{}
 			tc.MockSetup(mockStorage, accrualMock)
 
-			// Передаем mock в OrderService
 			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
 			orderService.UpdateOrderStatuses()
 
-			// Проверяем, были ли вызваны ожидаемые методы
 			if err := tc.CheckCalled(mockStorage); err != nil {
 				t.Errorf("Method call mismatch: %v", err)
 			}

@@ -16,7 +16,6 @@ import (
 func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Используем MockStorage
 	mockStorage := &tests.MockStorage{
 		SaveUserFn: func(user domain.User) error {
 			if user.Login == "existing_user" {
@@ -34,13 +33,10 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 
-	// Создаем AuthService через конструктор
 	authService := services.NewAuthService([]byte("secret"), logger, mockStorage)
 
-	// Создаем тестируемый обработчик
 	handler := NewRegisterPostHandler(authService, logger)
 
-	// Тестовые данные
 	testCases := []struct {
 		name               string
 		requestBody        string
@@ -79,16 +75,12 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Создаем тело запроса
 			req := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte(tc.requestBody)))
 
-			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
 
-			// Вызываем ServeHTTP
 			handler.ServeHTTP(rr, req)
 
-			// Проверяем статус ответа
 			if rr.Code != tc.expectedStatusCode {
 				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
 			}

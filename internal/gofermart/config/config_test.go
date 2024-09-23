@@ -8,9 +8,7 @@ import (
 	"testing"
 )
 
-// Тест для функции selectCfgFromSource
 func TestSelectCfgFromSource(t *testing.T) {
-	// Определяем структуру теста
 	type testCase struct {
 		name          string
 		flagValue     string
@@ -18,7 +16,6 @@ func TestSelectCfgFromSource(t *testing.T) {
 		expectedValue string
 	}
 
-	// Список тестов
 	testCases := []testCase{
 		{
 			name:          "Env_value_has_priority",
@@ -40,7 +37,6 @@ func TestSelectCfgFromSource(t *testing.T) {
 		},
 	}
 
-	// Запуск каждого теста
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := selectCfgFromSource(tc.flagValue, tc.envValue)
@@ -51,9 +47,7 @@ func TestSelectCfgFromSource(t *testing.T) {
 	}
 }
 
-// Тест для функции LoadConfig
 func TestLoadConfig(t *testing.T) {
-	// Определяем структуру теста
 	type testCase struct {
 		name           string
 		flagConfig     *domain.Config
@@ -61,7 +55,6 @@ func TestLoadConfig(t *testing.T) {
 		expectedConfig *domain.Config
 	}
 
-	// Функция для имитации загрузки переменных окружения
 	mockEnvParse := func(envConfig *domain.Config) {
 		*envConfig = domain.Config{
 			RunAddress:           "env-run-address",
@@ -71,7 +64,6 @@ func TestLoadConfig(t *testing.T) {
 		}
 	}
 
-	// Создаем тестовые конфигурации флагов
 	mockFlagConfig := &domain.Config{
 		RunAddress:           "flag-run-address",
 		DatabaseURI:          "flag-database-uri",
@@ -79,30 +71,26 @@ func TestLoadConfig(t *testing.T) {
 		JWTSecret:            "flag-jwt-secret",
 	}
 
-	// Ожидаемая конфигурация
 	expectedConfig := &domain.Config{
-		RunAddress:           "env-run-address",     // из env
-		DatabaseURI:          "env-database-uri",    // из env
-		AccrualSystemAddress: "env-accrual-address", // из env
-		JWTSecret:            "env-jwt-secret",      // из env
+		RunAddress:           "env-run-address",
+		DatabaseURI:          "env-database-uri",
+		AccrualSystemAddress: "env-accrual-address",
+		JWTSecret:            "env-jwt-secret",
 	}
 
-	// Тест кейсы
 	testCases := []testCase{
 		{
 			name:           "Env values have priority",
 			flagConfig:     mockFlagConfig,
-			envConfig:      &domain.Config{}, // начальная пустая конфигурация для env
-			expectedConfig: expectedConfig,   // ожидаемый результат
+			envConfig:      &domain.Config{},
+			expectedConfig: expectedConfig,
 		},
 	}
 
-	// Запуск тестов
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockEnvParse(tc.envConfig)
 
-			// Запускаем тестируемую функцию с mock-данными
 			config := &domain.Config{
 				RunAddress:           selectCfgFromSource(tc.flagConfig.RunAddress, tc.envConfig.RunAddress),
 				DatabaseURI:          selectCfgFromSource(tc.flagConfig.DatabaseURI, tc.envConfig.DatabaseURI),
@@ -117,14 +105,11 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-// Тест для функции parseFlags
-func TestParseFlags(t *testing.T) { // Сбрасываем флаги перед тестом, чтобы избежать повторного объявления
+func TestParseFlags(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	// Сброс флагов для тестов
 	os.Args = []string{"cmd", "-r", "http://test-accrual", "-d", "test-dsn", "-a", "localhost:9000", "-s", "test-secret"}
 
-	// Ожидаемые значения
 	expected := &domain.Config{
 		AccrualSystemAddress: "http://test-accrual",
 		DatabaseURI:          "test-dsn",
@@ -132,7 +117,6 @@ func TestParseFlags(t *testing.T) { // Сбрасываем флаги пере�
 		JWTSecret:            "test-secret",
 	}
 
-	// Парсинг флагов
 	config := parseFlags()
 
 	if diff := cmp.Diff(expected, config); diff != "" {
@@ -140,12 +124,9 @@ func TestParseFlags(t *testing.T) { // Сбрасываем флаги пере�
 	}
 }
 
-// Тест для функции LoadConfig
 func TestLoadConfigArgs(t *testing.T) {
-	// Сбрасываем флаги перед тестом, чтобы избежать повторного объявления
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	// Настройка окружения для тестов
 	err := os.Setenv("RUN_ADDRESS", "env-run-address")
 	if err != nil {
 		return
@@ -163,10 +144,8 @@ func TestLoadConfigArgs(t *testing.T) {
 		return
 	}
 
-	// Сброс флагов для тестов
 	os.Args = []string{"cmd", "-r", "http://flag-accrual", "-d", "flag-dsn", "-a", "localhost:9000", "-s", "flag-secret"}
 
-	// Ожидаемая конфигурация, в которой переменные окружения имеют приоритет
 	expected := &domain.Config{
 		RunAddress:           "env-run-address",
 		DatabaseURI:          "env-database-uri",
@@ -174,7 +153,6 @@ func TestLoadConfigArgs(t *testing.T) {
 		JWTSecret:            "env-jwt-secret",
 	}
 
-	// Загружаем конфигурацию
 	config, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig returned an error: %v", err)
@@ -184,7 +162,6 @@ func TestLoadConfigArgs(t *testing.T) {
 		t.Fatalf("Unexpected config (-want +got):\n%s", diff)
 	}
 
-	// Удаляем переменные окружения после теста
 	err = os.Unsetenv("RUN_ADDRESS")
 	if err != nil {
 		return

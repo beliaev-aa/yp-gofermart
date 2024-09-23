@@ -135,12 +135,12 @@ func TestAuthenticateUser(t *testing.T) {
 		{
 			Name: "AuthenticateUser_LoginNotFound",
 			MockReturn: func() (*domain.User, error) {
-				return nil, nil // Хранилище возвращает nil, что имитирует отсутствие пользователя
+				return nil, nil
 			},
 			Login:         "test_user",
 			Password:      "password123",
 			ExpectedAuth:  false,
-			ExpectedError: nil, // Ошибки быть не должно
+			ExpectedError: nil,
 		},
 		{
 			Name: "AuthenticateUser_InvalidPassword",
