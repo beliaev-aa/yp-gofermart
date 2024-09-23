@@ -151,7 +151,7 @@ func TestOrderService_GetOrders(t *testing.T) {
 			ExpectedOrders: []domain.Order{{OrderNumber: "12345", UserID: 1, OrderStatus: domain.OrderStatusNew}},
 		},
 		{
-			Name:  "GetOrders_Failure",
+			Name:  "GetOrders_Failure_UserNotFound",
 			Login: "user2",
 			MockSetup: func(m *tests.MockStorage) {
 				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
@@ -159,6 +159,19 @@ func TestOrderService_GetOrders(t *testing.T) {
 				}
 			},
 			ExpectedError: "user not found",
+		},
+		{
+			Name:  "GetOrders_Failure_GetOrdersByUserIDError",
+			Login: "user1",
+			MockSetup: func(m *tests.MockStorage) {
+				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
+					return &domain.User{UserID: 1}, nil
+				}
+				m.GetOrdersByUserIDFn = func(userID int) ([]domain.Order, error) {
+					return nil, errors.New("failed to get orders by user ID")
+				}
+			},
+			ExpectedError: "failed to get orders by user ID",
 		},
 	}
 
