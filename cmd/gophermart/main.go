@@ -32,8 +32,11 @@ func main() {
 		logger.Fatal("Failed to connect to database.", zap.Error(err))
 	}
 
+	// Инициализация сервиса для работы с внешним сервисом заказов
+	accrualService := services.NewAccrualService(cfg.AccrualSystemAddress, logger)
+
 	// Инициализация сервиса для работы с заказами
-	orderService := services.NewOrderService(cfg.AccrualSystemAddress, store, logger)
+	orderService := services.NewOrderService(accrualService, store, logger)
 
 	// Запуск фонового процесса для обновления статусов заказов
 	go func() {

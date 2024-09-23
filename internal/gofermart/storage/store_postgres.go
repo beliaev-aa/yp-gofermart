@@ -64,7 +64,7 @@ func (s *StorePostgres) GetUserByLogin(login string) (*domain.User, error) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			s.logger.Warn("User not found", zap.String("login", login))
-			return nil, nil
+			return nil, gofermartErrors.ErrUserNotFound
 		}
 		s.logger.Error("Failed to get user by login", zap.Error(err))
 		return nil, err

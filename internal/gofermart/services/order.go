@@ -4,46 +4,51 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
-	"encoding/json"
 	"errors"
 	"go.uber.org/zap"
-	"net/http"
 	"time"
 )
 
+// OrderService - представляет сервис для работы с заказами.
 type OrderService struct {
-	storage    storage.Storage
-	logger     *zap.Logger
-	accrualURL string
+	accrualClient AccrualService
+	logger        *zap.Logger
+	storage       storage.Storage
 }
 
-func NewOrderService(accrualURL string, storage storage.Storage, logger *zap.Logger) *OrderService {
+// NewOrderService - создает новый экземпляр OrderService.
+func NewOrderService(accrualClient AccrualService, storage storage.Storage, logger *zap.Logger) *OrderService {
 	return &OrderService{
-		storage:    storage,
-		logger:     logger,
-		accrualURL: accrualURL,
+		accrualClient: accrualClient,
+		logger:        logger,
+		storage:       storage,
 	}
 }
 
+// AddOrder - добавляет новый заказ, проверяя, не был ли он уже добавлен другим пользователем.
 func (s *OrderService) AddOrder(login, number string) error {
+	// Получаем пользователя по логину
 	user, err := s.storage.GetUserByLogin(login)
 	if err != nil {
 		return err
 	}
 
+	// Проверяем, был ли уже добавлен заказ с таким номером
 	existingOrder, err := s.storage.GetOrderByNumber(number)
 	if err != nil && !errors.Is(err, gofermartErrors.ErrOrderNotFound) {
 		return err
 	}
 
 	if existingOrder != nil {
+		// Если заказ добавлен текущим пользователем
 		if existingOrder.UserID == user.UserID {
 			return gofermartErrors.ErrOrderAlreadyUploaded
-		} else {
-			return gofermartErrors.ErrOrderUploadedByAnother
 		}
+		// Если заказ добавлен другим пользователем
+		return gofermartErrors.ErrOrderUploadedByAnother
 	}
 
+	// Создаем новый заказ и добавляем его в хранилище
 	order := domain.Order{
 		OrderNumber: number,
 		UserID:      user.UserID,
@@ -59,6 +64,7 @@ func (s *OrderService) AddOrder(login, number string) error {
 	return nil
 }
 
+// GetOrders - возвращает список заказов пользователя.
 func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
 	user, err := s.storage.GetUserByLogin(login)
 	if err != nil {
@@ -73,6 +79,7 @@ func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
 	return orders, nil
 }
 
+// UpdateOrderStatuses - обновляет статусы заказов путем запроса к внешней системе начисления.
 func (s *OrderService) UpdateOrderStatuses() {
 	s.logger.Info("Starting order status update")
 
@@ -92,7 +99,7 @@ func (s *OrderService) UpdateOrderStatuses() {
 		}
 
 		// Обращаемся к внешней системе начисления
-		accrual, status, err := s.fetchOrderAccrual(order.OrderNumber)
+		accrual, status, err := s.accrualClient.GetOrderAccrual(order.OrderNumber)
 		if err != nil {
 			s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
@@ -126,63 +133,7 @@ func (s *OrderService) UpdateOrderStatuses() {
 	}
 }
 
-func (s *OrderService) fetchOrderAccrual(orderNumber string) (float64, string, error) {
-	url := s.accrualURL + "/api/orders/" + orderNumber
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return 0, "", err
-	}
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		s.logger.Warn("Too many requests to accrual system", zap.String("order", orderNumber))
-		return 0, domain.OrderStatusProcessing, nil
-	}
-
-	if resp.StatusCode == http.StatusNoContent {
-		// Заказ не найден в системе начисления
-		return 0, domain.OrderStatusInvalid, nil
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, "", gofermartErrors.ErrAccrualSystemUnavailable
-	}
-
-	var result struct {
-		Order   string  `json:"order"`
-		Status  string  `json:"status"`
-		Accrual float64 `json:"accrual,omitempty"`
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
-		return 0, "", err
-	}
-
-	var status string
-	switch result.Status {
-	case "REGISTERED":
-		status = domain.OrderStatusProcessing
-	case "PROCESSING":
-		status = domain.OrderStatusProcessing
-	case "INVALID":
-		status = domain.OrderStatusInvalid
-	case "PROCESSED":
-		status = domain.OrderStatusProcessed
-	default:
-		status = domain.OrderStatusProcessing
-	}
-
-	return result.Accrual, status, nil
-}
-
+// UpdateUserBalance - обновляет баланс пользователя.
 func (s *OrderService) UpdateUserBalance(userID int, amount float64) error {
 	err := s.storage.UpdateUserBalance(userID, amount)
 	if err != nil {
