@@ -43,12 +43,10 @@ func main() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				// Обновление статусов заказов каждую секунду
-				orderService.UpdateOrderStatuses()
-			}
+		// Используем for range для перебора значений из канала тикера
+		for range ticker.C {
+			// Обновление статусов заказов каждую секунду
+			orderService.UpdateOrderStatuses()
 		}
 	}()
 

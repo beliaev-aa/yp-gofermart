@@ -182,6 +182,14 @@ func TestSendRequest(t *testing.T) {
 			// Вызываем тестируемый метод sendRequest
 			resp, err := service.sendRequest(tc.orderNumber)
 
+			if resp != nil {
+				defer func() {
+					if err := resp.Body.Close(); err != nil {
+						t.Errorf("Failed to close response body: %v", err)
+					}
+				}()
+			}
+
 			// Проверка результата
 			if tc.shouldError && err == nil {
 				t.Errorf("Expected error but got nil")
@@ -264,6 +272,13 @@ func TestProcessResponse(t *testing.T) {
 
 			// Отправляем запрос, чтобы получить ответ для processResponse
 			resp, err := service.sendRequest(tc.orderNumber)
+			if resp != nil {
+				defer func() {
+					if err := resp.Body.Close(); err != nil {
+						t.Errorf("Failed to close response body: %v", err)
+					}
+				}()
+			}
 			if err != nil {
 				t.Fatalf("Failed to send request: %v", err)
 			}
