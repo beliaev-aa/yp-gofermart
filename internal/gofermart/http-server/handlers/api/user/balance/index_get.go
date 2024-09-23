@@ -42,7 +42,7 @@ func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	balance, err := h.userService.GetBalance(login)
 	if err != nil {
 		h.logger.Error("Failed to get balance", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 

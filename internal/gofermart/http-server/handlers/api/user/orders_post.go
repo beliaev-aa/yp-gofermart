@@ -65,7 +65,7 @@ func (h *OrdersPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		default:
 			h.logger.Error("Failed to add order", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 	}

@@ -50,7 +50,7 @@ func (h *WithdrawalsGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	withdrawals, err := h.userService.GetWithdrawals(login)
 	if err != nil {
 		h.logger.Error("Failed to get withdrawals", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 

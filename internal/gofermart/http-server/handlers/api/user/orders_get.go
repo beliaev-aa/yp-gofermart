@@ -63,7 +63,7 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	orders, err := h.orderService.GetOrders(login)
 	if err != nil {
 		h.logger.Error("Failed to get orders", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
