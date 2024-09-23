@@ -13,48 +13,18 @@ import (
 	"time"
 )
 
-func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
+func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 	logger := zap.NewNop()
-
-	// Mock data для выводов
-	testWithdrawals := []domain.Withdrawal{
-		{
-			OrderNumber: "123456",
-			Amount:      100.50,
-			ProcessedAt: time.Now(),
-		},
-	}
-
-	// Mock data для пользователя
-	testUser := &domain.User{
-		UserID: 1,
-		Login:  "test_user",
-	}
 
 	// Test cases
 	testCases := []struct {
 		name               string
 		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
-		withdrawals        []domain.Withdrawal
+		orders             []domain.Order
 		mockError          error
 		expectedStatusCode int
-		expectedResponse   []WithdrawalResponse
+		expectedResponse   []OrderResponse
 	}{
-		{
-			name: "Success_Response_With_Data",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			withdrawals:        testWithdrawals,
-			expectedStatusCode: http.StatusOK,
-			expectedResponse: []WithdrawalResponse{
-				{
-					Order:       "123456",
-					Sum:         100.50,
-					ProcessedAt: testWithdrawals[0].ProcessedAt.Format(time.RFC3339),
-				},
-			},
-		},
 		{
 			name: "Unauthorized_Access",
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
@@ -63,22 +33,47 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 			expectedStatusCode: http.StatusUnauthorized,
 		},
 		{
-			name: "No_Content",
+			name: "Successful_Order_Response",
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
-			withdrawals:        []domain.Withdrawal{},
+			orders: []domain.Order{
+				{
+					OrderNumber: "123",
+					OrderStatus: domain.OrderStatusProcessed,
+					Accrual:     150.5,
+					UploadedAt:  time.Now(),
+				},
+			},
+			expectedStatusCode: http.StatusOK,
+			expectedResponse: []OrderResponse{
+				{
+					Number:     "123",
+					Status:     domain.OrderStatusProcessed,
+					Accrual:    150.5,
+					UploadedAt: time.Now().Format(time.RFC3339),
+				},
+			},
+		},
+		{
+			name: "No_Orders",
+			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
+				return "test_user", nil
+			},
+			orders:             []domain.Order{},
 			expectedStatusCode: http.StatusNoContent,
 		},
 		{
-			name: "Service_Error",
+			name: "Internal_Server_Error",
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
-			mockError:          errors.New("internal service error"),
+			mockError:          errors.New("database error"),
 			expectedStatusCode: http.StatusInternalServerError,
 		},
 	}
+
+	accrualMock := &tests.AccrualServiceMock{}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,24 +82,22 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 				ExtractFn: tc.mockExtractFn,
 			}
 
-			// Создаем mock UserService с реализацией GetUserByLogin
-			mockUserService := services.NewUserService(&tests.MockStorage{
+			// Создаем mock OrderService с реализацией GetOrders и GetUserByLogin
+			mockOrderService := services.NewOrderService(accrualMock, &tests.MockStorage{
 				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					if login == "test_user" {
-						return testUser, nil
-					}
-					return nil, errors.New("user not found")
+					// В данном случае возвращаем валидного пользователя
+					return &domain.User{UserID: 1}, nil
 				},
-				GetWithdrawalsByUserIDFn: func(userID int) ([]domain.Withdrawal, error) {
-					return tc.withdrawals, tc.mockError
+				GetOrdersByUserIDFn: func(userID int) ([]domain.Order, error) {
+					return tc.orders, tc.mockError
 				},
 			}, logger)
 
 			// Создаем тестируемый обработчик
-			handler := NewWithdrawalsGetHandler(mockUserService, mockExtractor, logger)
+			handler := NewOrdersGetHandler(mockOrderService, mockExtractor, logger)
 
 			// Создаем запрос
-			req := httptest.NewRequest("GET", "/withdrawals", nil)
+			req := httptest.NewRequest("GET", "/orders", nil)
 
 			// Создаем ResponseRecorder для записи ответа
 			rr := httptest.NewRecorder()
@@ -119,7 +112,7 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 
 			// Если ожидается JSON-ответ, проверяем его
 			if tc.expectedStatusCode == http.StatusOK {
-				var gotResponse []WithdrawalResponse
+				var gotResponse []OrderResponse
 				err := json.NewDecoder(rr.Body).Decode(&gotResponse)
 				if err != nil {
 					t.Errorf("failed to decode response: %v", err)

@@ -5,49 +5,34 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"sort"
-	"time"
-
 	"go.uber.org/zap"
+	"net/http"
+	"time"
 )
 
-type OrdersGetHandler struct {
-	logger            *zap.Logger
-	orderService      *services.OrderService
-	usernameExtractor utils.UsernameExtractor
-}
+type (
+	// OrdersGetHandler обрабатывает запросы на получение списка загруженных пользователем номеров заказов.
+	OrdersGetHandler struct {
+		logger            *zap.Logger
+		orderService      *services.OrderService
+		usernameExtractor utils.UsernameExtractor
+	}
+	// OrderResponse — структура для представления заказа в формате JSON.
+	OrderResponse struct {
+		Number     string  `json:"number"`
+		Status     string  `json:"status"`
+		Accrual    float64 `json:"accrual,omitempty"`
+		UploadedAt string  `json:"uploaded_at"`
+	}
+)
 
+// NewOrdersGetHandler - создает новый обработчик для получения заказов.
 func NewOrdersGetHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersGetHandler {
 	return &OrdersGetHandler{
 		logger:            logger,
 		orderService:      orderService,
 		usernameExtractor: usernameExtractor,
 	}
-}
-
-type OrderResponse struct {
-	Number     string  `json:"number"`
-	Status     string  `json:"status"`
-	Accrual    float64 `json:"accrual,omitempty"`
-	UploadedAt string  `json:"uploaded_at"`
-}
-
-func (o OrderResponse) MarshalJSON1() ([]byte, error) {
-	var accrualField string
-	if o.Accrual != 0 {
-		accrualField = fmt.Sprintf(`"accrual": %.2f,`, o.Accrual)
-	}
-
-	jsonString := fmt.Sprintf(`{"number": "%s", "status": "%s", %s "uploaded_at": "%s"}`,
-		o.Number,
-		o.Status,
-		accrualField,
-		o.UploadedAt,
-	)
-
-	return []byte(jsonString), nil
 }
 
 // ServeHTTP обрабатывает HTTP-запросы для получения списка загруженных пользователем номеров заказов.
@@ -71,12 +56,6 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Сортируем заказы по времени загрузки от старых к новым
-	sort.Slice(orders, func(i, j int) bool {
-		return orders[i].UploadedAt.Before(orders[j].UploadedAt)
-	})
-
-	// Формируем ответ
 	var response []OrderResponse
 	for _, order := range orders {
 		item := OrderResponse{
@@ -90,7 +69,6 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response = append(response, item)
 	}
 
-	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {

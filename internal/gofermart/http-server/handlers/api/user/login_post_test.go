@@ -6,12 +6,11 @@ import (
 	"beliaev-aa/yp-gofermart/tests"
 	"bytes"
 	"errors"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"go.uber.org/zap"
 )
 
 func TestLoginPostHandler_ServeHTTP(t *testing.T) {
