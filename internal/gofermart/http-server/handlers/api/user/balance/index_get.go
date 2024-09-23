@@ -2,22 +2,24 @@ package balance
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
+	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
 	"fmt"
-	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"net/http"
 )
 
 type IndexGetHandler struct {
-	userService *services.UserService
-	logger      *zap.Logger
+	logger            *zap.Logger
+	userService       *services.UserService
+	usernameExtractor utils.UsernameExtractor
 }
 
-func NewIndexGetHandler(userService *services.UserService, logger *zap.Logger) *IndexGetHandler {
+func NewIndexGetHandler(userService *services.UserService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *IndexGetHandler {
 	return &IndexGetHandler{
-		userService: userService,
-		logger:      logger,
+		logger:            logger,
+		userService:       userService,
+		usernameExtractor: usernameExtractor,
 	}
 }
 
@@ -31,10 +33,8 @@ func (r IndexGetResponse) MarshalJSON1() ([]byte, error) {
 }
 
 func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	login, ok := claims["username"].(string)
-	if !ok {
-		h.logger.Warn("Unauthorized access attempt")
+	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}

@@ -2,47 +2,41 @@ package user
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
+	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
-	"fmt"
-	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"net/http"
 	"time"
 )
 
-type WithdrawalsGetHandler struct {
-	userService *services.UserService
-	logger      *zap.Logger
-}
+type (
+	// WithdrawalsGetHandler — обработчик HTTP-запросов для получения списка выводов пользователя
+	WithdrawalsGetHandler struct {
+		logger            *zap.Logger
+		userService       *services.UserService
+		usernameExtractor utils.UsernameExtractor
+	}
+	// WithdrawalResponse — структура для представления ответа о выводе средств
+	WithdrawalResponse struct {
+		Order       string  `json:"order"`
+		Sum         float64 `json:"sum"`
+		ProcessedAt string  `json:"processed_at"`
+	}
+)
 
-func NewWithdrawalsGetHandler(userService *services.UserService, logger *zap.Logger) *WithdrawalsGetHandler {
+// NewWithdrawalsGetHandler — конструктор для создания обработчика WithdrawalsGetHandler
+func NewWithdrawalsGetHandler(userService *services.UserService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *WithdrawalsGetHandler {
 	return &WithdrawalsGetHandler{
-		userService: userService,
-		logger:      logger,
+		userService:       userService,
+		usernameExtractor: usernameExtractor,
+		logger:            logger,
 	}
 }
 
-type WithdrawalResponse struct {
-	Order       string  `json:"order"`
-	Sum         float64 `json:"sum"`
-	ProcessedAt string  `json:"processed_at"`
-}
-
-func (w WithdrawalResponse) MarshalJSON() ([]byte, error) {
-	jsonString := fmt.Sprintf(`{"order": "%s", "sum": %.2f, "processed_at": "%s"}`,
-		w.Order,
-		w.Sum,
-		w.ProcessedAt,
-	)
-
-	return []byte(jsonString), nil
-}
-
+// ServeHTTP — основной метод для обработки входящих HTTP-запросов
 func (h *WithdrawalsGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	login, ok := claims["username"].(string)
-	if !ok {
-		h.logger.Warn("Unauthorized access attempt")
+	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}

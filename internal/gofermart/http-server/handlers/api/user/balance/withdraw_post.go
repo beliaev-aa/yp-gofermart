@@ -6,20 +6,21 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
 	"errors"
-	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"net/http"
 )
 
 type WithdrawPostHandler struct {
-	userService *services.UserService
-	logger      *zap.Logger
+	logger            *zap.Logger
+	userService       *services.UserService
+	usernameExtractor utils.UsernameExtractor
 }
 
-func NewWithdrawPostHandler(userService *services.UserService, logger *zap.Logger) *WithdrawPostHandler {
+func NewWithdrawPostHandler(userService *services.UserService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *WithdrawPostHandler {
 	return &WithdrawPostHandler{
-		userService: userService,
-		logger:      logger,
+		logger:            logger,
+		userService:       userService,
+		usernameExtractor: usernameExtractor,
 	}
 }
 
@@ -29,10 +30,8 @@ type WithdrawPostRequest struct {
 }
 
 func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	login, ok := claims["username"].(string)
-	if !ok {
-		h.logger.Warn("Unauthorized access attempt")
+	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -50,7 +49,7 @@ func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := h.userService.Withdraw(login, req.Order, req.Sum)
+	err = h.userService.Withdraw(login, req.Order, req.Sum)
 	if err != nil {
 		switch {
 		case errors.Is(err, gofermartErrors.ErrInsufficientFunds):

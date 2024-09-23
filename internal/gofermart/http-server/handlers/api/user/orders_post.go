@@ -5,7 +5,6 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"errors"
-	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -13,24 +12,23 @@ import (
 )
 
 type OrdersPostHandler struct {
-	orderService *services.OrderService
-	logger       *zap.Logger
+	logger            *zap.Logger
+	orderService      *services.OrderService
+	usernameExtractor utils.UsernameExtractor
 }
 
-func NewOrdersPostHandler(orderService *services.OrderService, logger *zap.Logger) *OrdersPostHandler {
+func NewOrdersPostHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersPostHandler {
 	return &OrdersPostHandler{
-		orderService: orderService,
-		logger:       logger,
+		logger:            logger,
+		orderService:      orderService,
+		usernameExtractor: usernameExtractor,
 	}
 }
 
 // ServeHTTP обрабатывает HTTP-запросы для загрузки пользователем номера заказа для расчёта.
 func (h *OrdersPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Получаем информацию о пользователе из JWT-токена
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	login, ok := claims["username"].(string)
-	if !ok {
-		h.logger.Warn("Unauthorized access attempt")
+	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -42,7 +40,12 @@ func (h *OrdersPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			h.logger.Error("Failed to close response", zap.Error(err))
+		}
+	}(r.Body)
 
 	orderNumber := strings.TrimSpace(string(body))
 

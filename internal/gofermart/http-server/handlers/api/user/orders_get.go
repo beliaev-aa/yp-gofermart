@@ -3,25 +3,27 @@ package user
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
+	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
 	"time"
 
-	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 )
 
 type OrdersGetHandler struct {
-	orderService *services.OrderService
-	logger       *zap.Logger
+	logger            *zap.Logger
+	orderService      *services.OrderService
+	usernameExtractor utils.UsernameExtractor
 }
 
-func NewOrdersGetHandler(orderService *services.OrderService, logger *zap.Logger) *OrdersGetHandler {
+func NewOrdersGetHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersGetHandler {
 	return &OrdersGetHandler{
-		orderService: orderService,
-		logger:       logger,
+		logger:            logger,
+		orderService:      orderService,
+		usernameExtractor: usernameExtractor,
 	}
 }
 
@@ -50,11 +52,8 @@ func (o OrderResponse) MarshalJSON1() ([]byte, error) {
 
 // ServeHTTP обрабатывает HTTP-запросы для получения списка загруженных пользователем номеров заказов.
 func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Получаем информацию о пользователе из JWT-токена
-	_, claims, _ := jwtauth.FromContext(r.Context())
-	login, ok := claims["username"].(string)
-	if !ok {
-		h.logger.Warn("Unauthorized access attempt")
+	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
+	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
