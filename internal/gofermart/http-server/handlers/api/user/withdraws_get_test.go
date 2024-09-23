@@ -6,12 +6,11 @@ import (
 	"beliaev-aa/yp-gofermart/tests"
 	"encoding/json"
 	"errors"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // MockUsernameExtractor - mock реализация интерфейса UsernameExtractor

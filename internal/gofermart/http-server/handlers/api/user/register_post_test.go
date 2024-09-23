@@ -2,16 +2,16 @@ package user
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
-	"beliaev-aa/yp-gofermart/internal/gofermart/errors"
+	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
 	"bytes"
 	"encoding/json"
+	"errors"
+	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"go.uber.org/zap"
 )
 
 func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
@@ -21,7 +21,9 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 	mockStorage := &tests.MockStorage{
 		SaveUserFn: func(user domain.User) error {
 			if user.Login == "existing_user" {
-				return errors.ErrLoginAlreadyExists
+				return gofermartErrors.ErrLoginAlreadyExists
+			} else if user.Login == "server_error" {
+				return errors.New("user not found")
 			}
 			return nil
 		},
@@ -60,6 +62,14 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 				Password: "password123",
 			},
 			expectedStatusCode: http.StatusConflict,
+		},
+		{
+			name: "Server_Error",
+			requestBody: domain.AuthenticationRequest{
+				Login:    "server_error",
+				Password: "password123",
+			},
+			expectedStatusCode: http.StatusInternalServerError,
 		},
 	}
 
