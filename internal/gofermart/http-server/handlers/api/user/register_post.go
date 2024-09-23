@@ -10,11 +10,13 @@ import (
 	"net/http"
 )
 
+// RegisterPostHandler — обработчик HTTP-запросов для регистрации пользователя
 type RegisterPostHandler struct {
 	authService *services.AuthService
 	logger      *zap.Logger
 }
 
+// NewRegisterPostHandler — конструктор для создания обработчика регистрации
 func NewRegisterPostHandler(authService *services.AuthService, logger *zap.Logger) *RegisterPostHandler {
 	return &RegisterPostHandler{
 		authService: authService,
@@ -22,8 +24,9 @@ func NewRegisterPostHandler(authService *services.AuthService, logger *zap.Logge
 	}
 }
 
-// ServeHTTP обрабатывает HTTP-запросы для регистрации пользователя.
+// ServeHTTP — обрабатывает HTTP-запросы для регистрации пользователя.
 func (h *RegisterPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Декодируем запрос для получения данных пользователя
 	var req domain.AuthenticationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Error("Failed to decode request", zap.Error(err))
@@ -31,7 +34,9 @@ func (h *RegisterPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Попытка зарегистрировать пользователя
 	if err := h.authService.RegisterUser(req.Login, req.Password); err != nil {
+		// Проверка на конфликт (если логин уже существует)
 		if errors.Is(err, gofermartErrors.ErrLoginAlreadyExists) {
 			h.logger.Warn("Registration failed", zap.String("login", req.Login))
 			http.Error(w, "login already exist", http.StatusConflict)
@@ -42,6 +47,7 @@ func (h *RegisterPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Генерация JWT токена для зарегистрированного пользователя
 	token, err := h.authService.GenerateJWT(req.Login)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
@@ -49,6 +55,7 @@ func (h *RegisterPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Успешная регистрация и авторизация
 	h.logger.Info("User registered and authenticated", zap.String("login", req.Login))
 	w.Header().Set("Authorization", "Bearer "+token)
 	w.WriteHeader(http.StatusOK)
