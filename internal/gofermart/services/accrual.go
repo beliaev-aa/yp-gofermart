@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -31,49 +30,32 @@ func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 	}
 }
 
-// GetOrderAccrual - основная функция для получения информации о заказе
+// GetOrderAccrual - основная функция для получения информации о заказе и обработки ответа
 func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, string, error) {
-	resp, err := s.sendRequest(orderNumber)
-	if err != nil {
-		return 0, "", err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			s.logger.Error("Failed to close response", zap.Error(err))
-		}
-	}(resp.Body)
-
-	return s.processResponse(resp, orderNumber)
-}
-
-// sendRequest - метод для отправки запроса в систему начислений
-func (s *RealAccrualService) sendRequest(orderNumber string) (*http.Response, error) {
-	url := s.BaseURL + "/api/orders/" + orderNumber
-
 	if strings.Contains(orderNumber, "invalid") {
-		return nil, fmt.Errorf("invalid order number: %s", orderNumber)
+		return 0, "", fmt.Errorf("invalid order number: %s", orderNumber)
 	}
 
+	url := s.BaseURL + "/api/orders/" + orderNumber
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		s.logger.Error("Failed to create new request", zap.Error(err))
-		return nil, err
+		return 0, "", err
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		s.logger.Error("Request to accrual system failed", zap.Error(err))
-		return nil, err
+		return 0, "", err
 	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			s.logger.Error("Failed to close response body", zap.Error(closeErr))
+		}
+	}()
 
-	return resp, nil
-}
-
-// processResponse - метод для обработки ответа от системы начислений
-func (s *RealAccrualService) processResponse(resp *http.Response, orderNumber string) (float64, string, error) {
-	// Обрабатываем различные коды ответа HTTP
+	// Обрабатываем коды ответа HTTP
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
 		s.logger.Warn("Too many requests to accrual system", zap.String("order", orderNumber))
@@ -93,9 +75,7 @@ func (s *RealAccrualService) processResponse(resp *http.Response, orderNumber st
 		Status  string  `json:"status"`
 		Accrual float64 `json:"accrual,omitempty"`
 	}
-
-	err := json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		s.logger.Error("Failed to decode JSON response", zap.Error(err))
 		return 0, "", err
 	}
