@@ -74,6 +74,12 @@ func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, strin
 	if err != nil {
 		return 0, "", err
 	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			s.logger.Error("Failed to close body response", zap.Error(err))
+		}
+	}(resp.Body)
 
 	var status string
 	switch result.Status {
