@@ -33,10 +33,25 @@ func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 
 // GetOrderAccrual - основная функция для получения информации о заказе
 func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, string, error) {
-	resp, err := s.sendRequest(orderNumber)
+	url := s.BaseURL + "/api/orders/" + orderNumber
+
+	if strings.Contains(orderNumber, "invalid") {
+		return 0, "", fmt.Errorf("invalid order number: %s", orderNumber)
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		s.logger.Error("Failed to create new request", zap.Error(err))
 		return 0, "", err
 	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.Error("Request to accrual system failed", zap.Error(err))
+		return 0, "", err
+	}
+
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
@@ -45,30 +60,6 @@ func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, strin
 	}(resp.Body)
 
 	return s.processResponse(resp, orderNumber)
-}
-
-// sendRequest - метод для отправки запроса в систему начислений
-func (s *RealAccrualService) sendRequest(orderNumber string) (*http.Response, error) {
-	url := s.BaseURL + "/api/orders/" + orderNumber
-
-	if strings.Contains(orderNumber, "invalid") {
-		return nil, fmt.Errorf("invalid order number: %s", orderNumber)
-	}
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		s.logger.Error("Failed to create new request", zap.Error(err))
-		return nil, err
-	}
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		s.logger.Error("Request to accrual system failed", zap.Error(err))
-		return nil, err
-	}
-
-	return resp, nil
 }
 
 // processResponse - метод для обработки ответа от системы начислений
