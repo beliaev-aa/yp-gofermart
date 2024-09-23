@@ -1,4 +1,5 @@
-// Package utils +build !test
+//go:build !test
+
 package utils
 
 import (
