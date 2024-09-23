@@ -4,10 +4,8 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"encoding/json"
-	"fmt"
 	"go.uber.org/zap"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -32,10 +30,6 @@ func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 
 // GetOrderAccrual - основная функция для получения информации о заказе и обработки ответа
 func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, string, error) {
-	if strings.Contains(orderNumber, "invalid") {
-		return 0, "", fmt.Errorf("invalid order number: %s", orderNumber)
-	}
-
 	url := s.BaseURL + "/api/orders/" + orderNumber
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

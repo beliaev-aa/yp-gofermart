@@ -3,10 +3,11 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"fmt"
+	"errors"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -21,9 +22,29 @@ type testCase struct {
 	expectedError   error
 }
 
+func TestNewAccrualService(t *testing.T) {
+	logger := zap.NewNop()
+	baseURL := "https://example.com"
+
+	service := NewAccrualService(baseURL, logger)
+
+	realService, ok := service.(*RealAccrualService)
+	if !ok {
+		t.Fatalf("Expected *RealAccrualService, got %T", service)
+	}
+
+	if realService.BaseURL != baseURL {
+		t.Errorf("Expected BaseURL %v, got %v", baseURL, realService.BaseURL)
+	}
+
+	if realService.logger != logger {
+		t.Errorf("Expected logger %v, got %v", logger, realService.logger)
+	}
+}
+
 // TestGetOrderAccrual тестирует основной метод GetOrderAccrual
 func TestGetOrderAccrual(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 
 	// Список тестовых случаев
 	testCases := []testCase{
@@ -73,13 +94,20 @@ func TestGetOrderAccrual(t *testing.T) {
 			expectedError:   nil,
 		},
 		{
-			name:            "Request_Failed_Invalid_Order",
-			orderNumber:     "invalid_order_number",
-			mockStatusCode:  http.StatusOK,
-			mockResponse:    "",
+			name:            "Failed_to_Create_New_Request",
+			orderNumber:     "\x7f", // Некорректный символ в номере заказа
 			expectedAccrual: 0,
 			expectedStatus:  "",
-			expectedError:   fmt.Errorf("invalid order number: invalid_order_number"),
+			expectedError:   errors.New("invalid control character in URL"),
+		},
+		{
+			name:            "Failed_to_Decode_JSON_Response",
+			orderNumber:     "invalid_json",
+			mockStatusCode:  http.StatusOK,
+			mockResponse:    `{"order":"123456","status":123}`, // Некорректный тип данных для статуса
+			expectedAccrual: 0,
+			expectedStatus:  "",
+			expectedError:   errors.New("json: cannot unmarshal number into Go struct field"),
 		},
 	}
 
@@ -88,6 +116,11 @@ func TestGetOrderAccrual(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Создаем mock-сервер
 			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.orderNumber == "request_error" {
+					// Симулируем сбой выполнения запроса
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 				w.WriteHeader(tc.mockStatusCode)
 				if tc.mockResponse != "" {
 					_, err := w.Write([]byte(tc.mockResponse))
@@ -117,8 +150,8 @@ func TestGetOrderAccrual(t *testing.T) {
 			if tc.expectedError != nil {
 				if err == nil {
 					t.Errorf("Expected error %v, got nil", tc.expectedError)
-				} else if err.Error() != tc.expectedError.Error() {
-					t.Errorf("Expected error %v, got %v", tc.expectedError, err.Error())
+				} else if !strings.Contains(err.Error(), tc.expectedError.Error()) {
+					t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 				}
 			} else if err != nil {
 				t.Errorf("Expected no error, got %v", err)
@@ -129,7 +162,7 @@ func TestGetOrderAccrual(t *testing.T) {
 
 // TestProcessResponse - тестирует логику обработки ответа в GetOrderAccrual
 func TestProcessResponse(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 
 	testCases := []testCase{
 		{
