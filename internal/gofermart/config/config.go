@@ -4,6 +4,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"flag"
 	"github.com/caarlos0/env/v10"
+	"strings"
 )
 
 // parseFlags - парсит флаги и возвращает конфигурацию
@@ -42,6 +43,9 @@ func LoadConfig() (*domain.Config, error) {
 
 // selectCfgFromSource - выбирает значение из двух источников
 func selectCfgFromSource(flagValue, envValue string) string {
+	envValue = strings.TrimSpace(envValue)
+	flagValue = strings.TrimSpace(flagValue)
+
 	if envValue != "" {
 		return envValue
 	}
