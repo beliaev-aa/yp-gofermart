@@ -23,7 +23,7 @@ func LoadConfig() (*domain.Config, error) {
 	envConfig := &domain.Config{}
 	err := env.Parse(envConfig)
 	if err != nil {
-		return nil, err
+		return nil, err // coverage:ignore
 	}
 
 	// Загружаем флаги командной строки

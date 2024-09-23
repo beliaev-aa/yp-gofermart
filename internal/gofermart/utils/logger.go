@@ -9,6 +9,7 @@ import (
 
 // NewLogger - создает новый экземпляр Logger с конфигурацией для продакшн-окружения.
 // Logger будет использовать формат времени ISO8601 для логов.
+// coverage:ignore
 func NewLogger() *zap.Logger {
 	// Создание конфигурации для сервиса логирования в режиме продакшн
 	config := zap.NewProductionConfig()

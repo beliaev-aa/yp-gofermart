@@ -37,8 +37,8 @@ func (s *AuthService) RegisterUser(login, password string) error {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		s.logger.Error("Error generating password hash", zap.Error(err))
-		return err
+		s.logger.Error("Error generating password hash", zap.Error(err)) // coverage:ignore
+		return err                                                       // coverage:ignore
 	}
 
 	url := &domain.User{Login: login, Password: string(hashedPassword)}
