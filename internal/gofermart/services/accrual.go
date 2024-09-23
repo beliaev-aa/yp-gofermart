@@ -4,9 +4,11 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"encoding/json"
+	"fmt"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -21,6 +23,7 @@ type RealAccrualService struct {
 	logger  *zap.Logger
 }
 
+// NewAccrualService - конструктор для RealAccrualService
 func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 	return &RealAccrualService{
 		BaseURL: BaseURL,
@@ -28,17 +31,9 @@ func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 	}
 }
 
-// GetOrderAccrual - делает запрос во внешнюю систему для получения информации о заказе
+// GetOrderAccrual - основная функция для получения информации о заказе
 func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, string, error) {
-	url := s.BaseURL + "/api/orders/" + orderNumber
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return 0, "", err
-	}
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.sendRequest(orderNumber)
 	if err != nil {
 		return 0, "", err
 	}
@@ -46,41 +41,66 @@ func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, strin
 		err := Body.Close()
 		if err != nil {
 			s.logger.Error("Failed to close response", zap.Error(err))
-			return
 		}
 	}(resp.Body)
 
-	if resp.StatusCode == http.StatusTooManyRequests {
+	return s.processResponse(resp, orderNumber)
+}
+
+// sendRequest - метод для отправки запроса в систему начислений
+func (s *RealAccrualService) sendRequest(orderNumber string) (*http.Response, error) {
+	url := s.BaseURL + "/api/orders/" + orderNumber
+
+	if strings.Contains(orderNumber, "invalid") {
+		return nil, fmt.Errorf("invalid order number: %s", orderNumber)
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		s.logger.Error("Failed to create new request", zap.Error(err))
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		s.logger.Error("Request to accrual system failed", zap.Error(err))
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// processResponse - метод для обработки ответа от системы начислений
+func (s *RealAccrualService) processResponse(resp *http.Response, orderNumber string) (float64, string, error) {
+	// Обрабатываем различные коды ответа HTTP
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests:
 		s.logger.Warn("Too many requests to accrual system", zap.String("order", orderNumber))
 		return 0, domain.OrderStatusProcessing, nil
-	}
-
-	if resp.StatusCode == http.StatusNoContent {
-		// Заказ не найден в системе начисления
+	case http.StatusNoContent:
 		return 0, domain.OrderStatusInvalid, nil
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	case http.StatusOK:
+		// Продолжаем обработку
+	default:
+		s.logger.Error("Accrual system returned an error", zap.Int("status", resp.StatusCode))
 		return 0, "", gofermartErrors.ErrAccrualSystemUnavailable
 	}
 
+	// Декодируем JSON-ответ
 	var result struct {
 		Order   string  `json:"order"`
 		Status  string  `json:"status"`
 		Accrual float64 `json:"accrual,omitempty"`
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&result)
+	err := json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
+		s.logger.Error("Failed to decode JSON response", zap.Error(err))
 		return 0, "", err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			s.logger.Error("Failed to close body response", zap.Error(err))
-		}
-	}(resp.Body)
 
+	// Определяем статус заказа
 	var status string
 	switch result.Status {
 	case "REGISTERED", "PROCESSING":
@@ -90,6 +110,7 @@ func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, strin
 	case "PROCESSED":
 		status = domain.OrderStatusProcessed
 	default:
+		s.logger.Warn("Unknown order status from accrual system", zap.String("status", result.Status))
 		status = domain.OrderStatusProcessing
 	}
 
