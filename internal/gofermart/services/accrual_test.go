@@ -109,6 +109,13 @@ func TestGetOrderAccrual(t *testing.T) {
 			expectedStatus:  "",
 			expectedError:   errors.New("json: cannot unmarshal number into Go struct field"),
 		},
+		{
+			name:            "Invalid_URL_Request",
+			orderNumber:     "request_failure",
+			expectedAccrual: 0,
+			expectedStatus:  "",
+			expectedError:   errors.New("unsupported protocol scheme"),
+		},
 	}
 
 	// Проходим по каждому тестовому случаю
@@ -131,9 +138,14 @@ func TestGetOrderAccrual(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
+			accrualURL := mockServer.URL
 			// Инициализация сервиса с mock-адресом
+			if tc.name == "Invalid_URL_Request" {
+				accrualURL = "invalid-url"
+			}
+
 			service := &RealAccrualService{
-				BaseURL: mockServer.URL,
+				BaseURL: accrualURL,
 				logger:  logger,
 			}
 
