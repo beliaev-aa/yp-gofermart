@@ -12,7 +12,7 @@ const (
 	defaultAccrualSystemAddress = "http://localhost:8080"
 	defaultDatabaseURI          = ""
 	defaultJWTSecret            = "your-256-bit-secret-key"
-	defaultRunAddress           = "localhost:8080"
+	defaultRunAddress           = "localhost:8088"
 )
 
 var (
