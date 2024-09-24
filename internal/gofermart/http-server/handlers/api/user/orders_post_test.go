@@ -114,6 +114,26 @@ func TestOrdersPostHandler_ServeHTTP(t *testing.T) {
 			expectedStatusCode: http.StatusAccepted,
 			expectedBody:       "",
 		},
+		{
+			name: "Order_Already_Uploaded_By_Same_User",
+			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
+				return "test_user", nil
+			},
+			mockSetup: func(m *tests.MockStorage) {
+				m.AddOrderFn = func(order domain.Order) error {
+					return gofermartErrors.ErrOrderAlreadyUploaded
+				}
+				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
+					return &domain.User{UserID: 1}, nil
+				}
+				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
+					return &domain.Order{UserID: 1, OrderNumber: validOrderNumber}, nil
+				}
+			},
+			body:               validOrderNumber,
+			expectedStatusCode: http.StatusOK,
+			expectedBody:       "",
+		},
 	}
 
 	for _, tc := range testCases {
