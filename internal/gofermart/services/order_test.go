@@ -330,138 +330,6 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 			},
 			ExpectedError: "failed to lock order",
 		},
-		{
-			Name: "UpdateOrderStatuses_Failure_GetOrderAccrual",
-			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
-				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
-					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
-				}
-				m.LockOrderForProcessingFn = func(orderNumber string) error {
-					return nil
-				}
-				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
-					return 0, "", errors.New("failed to fetch accrual")
-				}
-			},
-			CheckCalled: func(m *tests.MockStorage) error {
-				if !m.GetOrdersForProcessingCalled {
-					return errors.New("GetOrdersForProcessing was not called")
-				}
-				if !m.LockOrderForProcessingCalled {
-					return errors.New("LockOrderForProcessing was not called")
-				}
-				return nil
-			},
-			ExpectedError: "failed to fetch accrual",
-		},
-		{
-			Name: "UpdateOrderStatuses_Failure_UpdateOrder",
-			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
-				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
-					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
-				}
-				m.LockOrderForProcessingFn = func(orderNumber string) error {
-					return nil
-				}
-				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
-					return 100.0, domain.OrderStatusProcessed, nil
-				}
-				m.UpdateOrderFn = func(order domain.Order) error {
-					return errors.New("failed to update order")
-				}
-			},
-			CheckCalled: func(m *tests.MockStorage) error {
-				if !m.GetOrdersForProcessingCalled {
-					return errors.New("GetOrdersForProcessing was not called")
-				}
-				if !m.LockOrderForProcessingCalled {
-					return errors.New("LockOrderForProcessing was not called")
-				}
-				if !m.UpdateOrderCalled {
-					return errors.New("UpdateOrder was not called")
-				}
-				return nil
-			},
-			ExpectedError: "failed to update order",
-		},
-		{
-			Name: "UpdateOrderStatuses_Failure_UpdateUserBalance",
-			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
-				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
-					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
-				}
-				m.LockOrderForProcessingFn = func(orderNumber string) error {
-					return nil
-				}
-				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
-					return 100.0, domain.OrderStatusProcessed, nil
-				}
-				m.UpdateOrderFn = func(order domain.Order) error {
-					return nil
-				}
-				m.UpdateUserBalanceFn = func(userID int, amount float64) error {
-					return errors.New("failed to update balance")
-				}
-			},
-			CheckCalled: func(m *tests.MockStorage) error {
-				if !m.GetOrdersForProcessingCalled {
-					return errors.New("GetOrdersForProcessing was not called")
-				}
-				if !m.LockOrderForProcessingCalled {
-					return errors.New("LockOrderForProcessing was not called")
-				}
-				if !m.UpdateOrderCalled {
-					return errors.New("UpdateOrder was not called")
-				}
-				if !m.UpdateUserBalanceCalled {
-					return errors.New("UpdateUserBalance was not called")
-				}
-				return nil
-			},
-			ExpectedError: "failed to update balance",
-		},
-		{
-			Name: "UpdateOrderStatuses_Failure_UnlockOrder",
-			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
-				m.GetOrdersForProcessingFn = func() ([]domain.Order, error) {
-					return []domain.Order{{OrderNumber: "12345", UserID: 1}}, nil
-				}
-				m.LockOrderForProcessingFn = func(orderNumber string) error {
-					return nil
-				}
-				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
-					return 100.0, domain.OrderStatusProcessed, nil
-				}
-				m.UpdateOrderFn = func(order domain.Order) error {
-					return nil
-				}
-				m.UpdateUserBalanceFn = func(userID int, amount float64) error {
-					return nil
-				}
-				m.UnlockOrderFn = func(orderNumber string) error {
-					return errors.New("failed to unlock order")
-				}
-			},
-			CheckCalled: func(m *tests.MockStorage) error {
-				if !m.GetOrdersForProcessingCalled {
-					return errors.New("GetOrdersForProcessing was not called")
-				}
-				if !m.LockOrderForProcessingCalled {
-					return errors.New("LockOrderForProcessing was not called")
-				}
-				if !m.UpdateOrderCalled {
-					return errors.New("UpdateOrder was not called")
-				}
-				if !m.UpdateUserBalanceCalled {
-					return errors.New("UpdateUserBalance was not called")
-				}
-				if !m.UnlockOrderCalled {
-					return errors.New("UnlockOrder was not called")
-				}
-				return nil
-			},
-			ExpectedError: "failed to unlock order",
-		},
 	}
 
 	for _, tc := range testCases {
@@ -472,6 +340,123 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 
 			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
 			orderService.UpdateOrderStatuses()
+
+			if err := tc.CheckCalled(mockStorage); err != nil {
+				t.Errorf("Method call mismatch: %v", err)
+			}
+		})
+	}
+}
+
+func TestOrderService_ProcessOrder(t *testing.T) {
+	testCases := []struct {
+		Name            string
+		Order           domain.Order
+		MockSetup       func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock)
+		ExpectedError   string
+		ExpectedStatus  string
+		ExpectedAccrual float64
+		CheckCalled     func(m *tests.MockStorage) error
+	}{
+		{
+			Name:  "ProcessOrder_Success",
+			Order: domain.Order{OrderNumber: "12345", UserID: 1},
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
+				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
+					return 100.0, domain.OrderStatusProcessed, nil
+				}
+				m.UpdateOrderFn = func(order domain.Order) error {
+					return nil
+				}
+				m.UpdateUserBalanceFn = func(userID int, amount float64) error {
+					return nil
+				}
+			},
+			ExpectedStatus:  domain.OrderStatusProcessed,
+			ExpectedAccrual: 100.0,
+			CheckCalled: func(m *tests.MockStorage) error {
+				if !m.UpdateOrderCalled {
+					return errors.New("UpdateOrder was not called")
+				}
+				if !m.UpdateUserBalanceCalled {
+					return errors.New("UpdateUserBalance was not called")
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "ProcessOrder_Failure_GetOrderAccrual",
+			Order: domain.Order{OrderNumber: "12345", UserID: 1},
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
+				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
+					return 0, "", errors.New("failed to fetch accrual")
+				}
+			},
+			ExpectedError: "failed to fetch accrual",
+			CheckCalled: func(m *tests.MockStorage) error {
+				if m.UpdateOrderCalled {
+					return errors.New("UpdateOrder should not have been called")
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "ProcessOrder_Failure_UpdateOrder",
+			Order: domain.Order{OrderNumber: "12345", UserID: 1},
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
+				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
+					return 100.0, domain.OrderStatusProcessed, nil
+				}
+				m.UpdateOrderFn = func(order domain.Order) error {
+					return errors.New("failed to update order")
+				}
+			},
+			ExpectedError: "failed to update order",
+			CheckCalled: func(m *tests.MockStorage) error {
+				if !m.UpdateOrderCalled {
+					return errors.New("UpdateOrder was not called")
+				}
+				if m.UpdateUserBalanceCalled {
+					return errors.New("UpdateUserBalance should not have been called")
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "ProcessOrder_Failure_UpdateUserBalance",
+			Order: domain.Order{OrderNumber: "12345", UserID: 1},
+			MockSetup: func(m *tests.MockStorage, accrualMock *tests.AccrualServiceMock) {
+				accrualMock.GetOrderAccrualFn = func(orderNumber string) (float64, string, error) {
+					return 100.0, domain.OrderStatusProcessed, nil
+				}
+				m.UpdateOrderFn = func(order domain.Order) error {
+					return nil
+				}
+				m.UpdateUserBalanceFn = func(userID int, amount float64) error {
+					return errors.New("failed to update balance")
+				}
+			},
+			ExpectedError: "failed to update balance",
+			CheckCalled: func(m *tests.MockStorage) error {
+				if !m.UpdateOrderCalled {
+					return errors.New("UpdateOrder was not called")
+				}
+				if !m.UpdateUserBalanceCalled {
+					return errors.New("UpdateUserBalance was not called")
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			mockStorage := &tests.MockStorage{}
+			accrualMock := &tests.AccrualServiceMock{}
+			tc.MockSetup(mockStorage, accrualMock)
+
+			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
+			orderService.processOrder(tc.Order)
 
 			if err := tc.CheckCalled(mockStorage); err != nil {
 				t.Errorf("Method call mismatch: %v", err)

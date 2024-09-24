@@ -73,12 +73,23 @@ func main() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
+		// Канал для отслеживания обработки
+		processingOrders := make(chan struct{}, 1)
+
 		for {
 			select {
 			case <-ticker.C:
-				orderService.UpdateOrderStatuses()
+				select {
+				case processingOrders <- struct{}{}:
+					orderService.UpdateOrderStatuses()
+					<-processingOrders
+				default:
+					// Избегаем запуска новой обработки, если текущая не завершена
+					logger.Warn("Skipping order update due to ongoing processing")
+				}
 			case <-ctx.Done():
-				// Завершение работы goroutine при получении сигнала завершения
+				logger.Info("Waiting for ongoing order status updates to complete")
+				processingOrders <- struct{}{}
 				logger.Info("Shutting down order status update goroutine")
 				return
 			}

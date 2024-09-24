@@ -98,37 +98,40 @@ func (s *OrderService) UpdateOrderStatuses() {
 			continue
 		}
 
-		// Обращаемся к внешней системе начисления
-		accrual, status, err := s.accrualClient.GetOrderAccrual(order.OrderNumber)
-		if err != nil {
-			s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
-			continue
-		}
-
-		// Обновляем статус и начисление заказа
-		order.OrderStatus = status
-		order.Accrual = accrual
-
-		err = s.storage.UpdateOrder(order)
-		if err != nil {
-			s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
-			continue
-		}
-
-		// Если заказ обработан, обновляем баланс пользователя
-		if status == domain.OrderStatusProcessed {
-			err = s.UpdateUserBalance(order.UserID, accrual)
-			if err != nil {
-				s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
-				continue
-			}
-		}
+		// Обработка заказа
+		s.processOrder(order)
 
 		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
 		err = s.storage.UnlockOrder(order.OrderNumber)
 		if err != nil {
 			s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
+		}
+	}
+}
+
+// processOrder - обрабатывает конкретный заказ
+func (s *OrderService) processOrder(order domain.Order) {
+	accrual, status, err := s.accrualClient.GetOrderAccrual(order.OrderNumber)
+	if err != nil {
+		s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
+		return
+	}
+
+	order.OrderStatus = status
+	order.Accrual = accrual
+
+	err = s.storage.UpdateOrder(order)
+	if err != nil {
+		s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
+		return
+	}
+
+	if status == domain.OrderStatusProcessed {
+		err = s.UpdateUserBalance(order.UserID, accrual)
+		if err != nil {
+			s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
+			return
 		}
 	}
 }
