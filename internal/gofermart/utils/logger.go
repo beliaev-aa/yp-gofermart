@@ -29,8 +29,8 @@ func NewLogger() *zap.Logger {
 		// Выполнение синхронизации (например, для flush)
 		err := logger.Sync()
 
-		// Обработка ошибок, игнорируем некоторые системные ошибки (например, EBADF или ENOTTY)
-		if err != nil && (!errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.ENOTTY)) {
+		// Игнорирование ошибок, связанных с некорректными файловыми дескрипторами
+		if err != nil && (!errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.ENOTTY) && !errors.Is(err, syscall.EINVAL)) {
 			// В случае серьёзной ошибки, делаем запись в лог
 			logger.Fatal("Server failed on Sync()-method call on zap.Logger.", zap.Error(err))
 		}
