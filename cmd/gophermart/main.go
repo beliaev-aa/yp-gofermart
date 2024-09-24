@@ -8,9 +8,15 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
+	"context"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -38,19 +44,7 @@ func main() {
 	// Инициализация сервиса для работы с заказами
 	orderService := services.NewOrderService(accrualService, store, logger)
 
-	// Запуск фонового процесса для обновления статусов заказов
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		// Используем for range для перебора значений из канала тикера
-		for range ticker.C {
-			// Обновление статусов заказов каждую секунду
-			orderService.UpdateOrderStatuses()
-		}
-	}()
-
-	// Создание сервисов приложения: аутентификация, заказы и пользователи
+	// Создание сервисов приложения
 	appServices := &services.AppServices{
 		AuthService:  services.NewAuthService([]byte(cfg.JWTSecret), logger, store),
 		OrderService: orderService,
@@ -59,17 +53,64 @@ func main() {
 
 	// Инициализация роутера Chi
 	r := chi.NewRouter()
-
-	// Регистрация маршрутов приложения
 	httpserver.RegisterRoutes(r, appServices, logger)
 
 	// Логирование запуска сервера
 	logger.Info("Starting server on " + cfg.RunAddress)
 
-	// Запуск HTTP-сервера
-	err = http.ListenAndServe(cfg.RunAddress, r)
-	if err != nil {
-		// Завершение работы приложения с ошибкой при старте сервера
-		logger.Fatal("Server failed to start", zap.Error(err))
+	// Создаем канал для захвата системных сигналов
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	// Создаем контекст для управления goroutine обновления статусов заказов
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+
+	// Запуск фонового процесса для обновления статусов заказов
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				orderService.UpdateOrderStatuses()
+			case <-ctx.Done():
+				// Завершение работы goroutine при получении сигнала завершения
+				logger.Info("Shutting down order status update goroutine")
+				return
+			}
+		}
+	}()
+
+	// Запуск HTTP-сервера в отдельной goroutine
+	server := &http.Server{
+		Addr:    cfg.RunAddress,
+		Handler: r,
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal("Server failed to start", zap.Error(err))
+		}
+	}()
+
+	<-stopChan
+	logger.Info("Shutting down server...")
+
+	cancel()
+
+	wg.Wait()
+
+	// Завершаем работу HTTP-сервера с таймаутом для завершения текущих запросов
+	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+
+	if err := server.Shutdown(ctxShutdown); err != nil {
+		logger.Fatal("Server shutdown failed", zap.Error(err))
+	} else {
+		logger.Info("Server gracefully stopped")
 	}
 }
