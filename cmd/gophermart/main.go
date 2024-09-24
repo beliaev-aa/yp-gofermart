@@ -31,12 +31,6 @@ func main() {
 		// Завершение работы приложения с ошибкой при подключении к базе данных
 		logger.Fatal("Failed to connect to database.", zap.Error(err))
 	}
-	defer func(store storage.Storage) {
-		err := store.Close()
-		if err != nil {
-			logger.Fatal("Failed to close database connection.", zap.Error(err))
-		}
-	}(store)
 
 	// Инициализация сервиса для работы с внешним сервисом заказов
 	accrualService := services.NewAccrualService(cfg.AccrualSystemAddress, logger)

@@ -16,5 +16,4 @@ type Storage interface {
 	UnlockOrder(orderNumber string) error
 	UpdateOrder(order domain.Order) error
 	UpdateUserBalance(userID int, amount float64) error
-	Close() error
 }
