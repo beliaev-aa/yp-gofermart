@@ -12,7 +12,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"time"
 )
 
 // StorePostgres — структура для работы с базой данных PostgreSQL
@@ -27,21 +26,6 @@ func NewStorage(dsn string, logger *zap.Logger) (Storage, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		logger.Error("Failed to open database connection", zap.Error(err))
-		return nil, err
-	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		logger.Error("Failed to get sql.DB", zap.Error(err))
-		return nil, err
-	}
-
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(1)
-	sqlDB.SetConnMaxIdleTime(1 * time.Minute)
-
-	if err := sqlDB.Ping(); err != nil {
-		logger.Error("Failed to ping database", zap.Error(err))
 		return nil, err
 	}
 
