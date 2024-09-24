@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"os"
-	"strings"
 )
 
 const (
@@ -46,15 +45,6 @@ func LoadConfig() (*domain.Config, error) {
 	if envJWTSecret := os.Getenv("JWT_SECRET"); envJWTSecret != "" {
 		cfg.JWTSecret = envJWTSecret
 	}
-
-	cfg.AccrualSystemAddress = strings.ReplaceAll(cfg.AccrualSystemAddress, "\"", "")
-	cfg.AccrualSystemAddress = strings.ReplaceAll(cfg.AccrualSystemAddress, " ", "")
-
-	cfg.DatabaseURI = strings.ReplaceAll(cfg.DatabaseURI, "\"", "")
-	cfg.DatabaseURI = strings.ReplaceAll(cfg.DatabaseURI, " ", "")
-
-	cfg.RunAddress = strings.ReplaceAll(cfg.RunAddress, "\"", "")
-	cfg.RunAddress = strings.ReplaceAll(cfg.RunAddress, " ", "")
 
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
