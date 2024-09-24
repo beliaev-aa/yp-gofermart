@@ -3,7 +3,6 @@ module beliaev-aa/yp-gofermart
 go 1.22.5
 
 require (
-	github.com/caarlos0/env/v10 v10.0.0
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-chi/jwtauth/v5 v5.3.1
 	github.com/google/go-cmp v0.6.0

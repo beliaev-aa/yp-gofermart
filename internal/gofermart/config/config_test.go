@@ -2,6 +2,7 @@ package config
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
+	"errors"
 	"flag"
 	"github.com/google/go-cmp/cmp"
 	"os"
@@ -14,7 +15,7 @@ func TestLoadConfig(t *testing.T) {
 		envVariables   map[string]string
 		args           []string
 		expectedConfig *domain.Config
-		expectedErr    bool
+		expectedErr    error
 	}
 
 	testCases := []testCase{
@@ -38,7 +39,6 @@ func TestLoadConfig(t *testing.T) {
 				AccrualSystemAddress: "env_accrual_system_address",
 				JWTSecret:            "env_jwt_secret",
 			},
-			expectedErr: false,
 		},
 		{
 			name:         "Flags_Used_If_Env_Variables_Not_Set",
@@ -55,26 +55,27 @@ func TestLoadConfig(t *testing.T) {
 				AccrualSystemAddress: "flag_accrual_system_address",
 				JWTSecret:            "flag_jwt_secret",
 			},
-			expectedErr: false,
 		},
 		{
-			name:         "Default_Values_Used_If_Neither_Flags_Or_Env_Set",
-			envVariables: map[string]string{},
-			args:         []string{},
-			expectedConfig: &domain.Config{
-				RunAddress:           "localhost:8080",
-				DatabaseURI:          "",
-				AccrualSystemAddress: "http://localhost:8080",
-				JWTSecret:            "your-256-bit-secret-key",
+			name: "Config_Validation_Error_If_Database_URI_Not_Set",
+			envVariables: map[string]string{
+				"RUN_ADDRESS":            "env_run_address",
+				"ACCRUAL_SYSTEM_ADDRESS": "env_accrual_system_address",
+				"JWT_SECRET":             "env_jwt_secret",
 			},
-			expectedErr: false,
+			args: []string{
+				"-a", "flag_run_address",
+				"-r", "flag_accrual_system_address",
+				"-s", "flag_jwt_secret",
+			},
+			expectedConfig: nil,
+			expectedErr:    ErrDatabaseConfig,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Clearenv()
-			os.Args = append([]string{"cmd"}, tc.args...)
 
 			for key, value := range tc.envVariables {
 				if err := os.Setenv(key, value); err != nil {
@@ -82,16 +83,74 @@ func TestLoadConfig(t *testing.T) {
 				}
 			}
 
+			os.Args = append([]string{"cmd"}, tc.args...)
+
 			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 
 			cfg, err := LoadConfig()
 
-			if (err != nil) != tc.expectedErr {
+			if !errors.Is(err, tc.expectedErr) {
 				t.Errorf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
-			if diff := cmp.Diff(tc.expectedConfig, cfg); diff != "" {
-				t.Fatalf("Unexpected config (-want +got):\n%s", diff)
+			if tc.expectedErr != nil {
+				if diff := cmp.Diff(tc.expectedConfig, cfg); diff != "" {
+					t.Fatalf("Unexpected config (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	type testCase struct {
+		name        string
+		config      *domain.Config
+		expectedErr error
+	}
+
+	testCases := []testCase{
+		{
+			name: "Valid_Config",
+			config: &domain.Config{
+				RunAddress:           "localhost:8080",
+				DatabaseURI:          "postgres://user:pass@localhost/db",
+				AccrualSystemAddress: "http://localhost:8080",
+			},
+			expectedErr: nil,
+		},
+		{
+			name: "Missing_AccrualSystemAddress",
+			config: &domain.Config{
+				RunAddress:  "localhost:8080",
+				DatabaseURI: "postgres://user:pass@localhost/db",
+			},
+			expectedErr: ErrAccrualConfig,
+		},
+		{
+			name: "Missing_DatabaseURI",
+			config: &domain.Config{
+				RunAddress:           "localhost:8080",
+				AccrualSystemAddress: "http://localhost:8080",
+			},
+			expectedErr: ErrDatabaseConfig,
+		},
+		{
+			name: "Missing_RunAddress",
+			config: &domain.Config{
+				DatabaseURI:          "postgres://user:pass@localhost/db",
+				AccrualSystemAddress: "http://localhost:8080",
+			},
+			expectedErr: ErrRunAddressConfig,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateConfig(tc.config)
+
+			if !errors.Is(err, tc.expectedErr) {
+				t.Errorf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 		})
 	}
