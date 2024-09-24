@@ -1,3 +1,5 @@
+//go:build !test
+
 package utils
 
 import (
@@ -7,15 +9,11 @@ import (
 	"syscall"
 )
 
-// NewLogger - создает новый экземпляр Logger с конфигурацией для вывода в stdout.
+// NewLogger - создает новый экземпляр Logger с конфигурацией для продакшн-окружения.
+// Logger будет использовать формат времени ISO8601 для логов.
 func NewLogger() *zap.Logger {
-	// Настройка конфигурации для вывода в stdout
+	// Создание конфигурации для сервиса логирования в режиме продакшн
 	config := zap.NewProductionConfig()
-
-	// Изменение выходного потока на stdout
-	config.OutputPaths = []string{"stdout"}
-	config.ErrorOutputPaths = []string{"stdout"}
-
 	// Задание формата времени в ISO8601 для читаемости
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
