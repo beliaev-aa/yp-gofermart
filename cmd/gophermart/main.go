@@ -1,5 +1,3 @@
-//go:build !test
-
 package main
 
 import (
@@ -8,6 +6,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
+	"beliaev-aa/yp-gofermart/internal/gofermart/workers"
 	"context"
 	"errors"
 	"github.com/go-chi/chi/v5"
@@ -68,33 +67,7 @@ func main() {
 
 	// Запуск фонового процесса для обновления статусов заказов
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		// Канал для отслеживания обработки
-		processingOrders := make(chan struct{}, 1)
-
-		for {
-			select {
-			case <-ticker.C:
-				select {
-				case processingOrders <- struct{}{}:
-					orderService.UpdateOrderStatuses()
-					<-processingOrders
-				default:
-					// Избегаем запуска новой обработки, если текущая не завершена
-					logger.Warn("Skipping order update due to ongoing processing")
-				}
-			case <-ctx.Done():
-				logger.Info("Waiting for ongoing order status updates to complete")
-				processingOrders <- struct{}{}
-				logger.Info("Shutting down order status update goroutine")
-				return
-			}
-		}
-	}()
+	go workers.StartOrderStatusUpdater(ctx, orderService, logger, &wg)
 
 	// Запуск HTTP-сервера в отдельной goroutine
 	server := &http.Server{

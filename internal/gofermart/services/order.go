@@ -4,10 +4,19 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
+	"context"
 	"errors"
 	"go.uber.org/zap"
 	"time"
 )
+
+// OrderServiceInterface - интерфейс для сервиса работы с заказами.
+type OrderServiceInterface interface {
+	AddOrder(login, number string) error
+	GetOrders(login string) ([]domain.Order, error)
+	UpdateOrderStatuses(ctx context.Context)
+	UpdateUserBalance(userID int, amount float64) error
+}
 
 // OrderService - представляет сервис для работы с заказами.
 type OrderService struct {
@@ -80,7 +89,7 @@ func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
 }
 
 // UpdateOrderStatuses - обновляет статусы заказов путем запроса к внешней системе начисления.
-func (s *OrderService) UpdateOrderStatuses() {
+func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 	s.logger.Info("Starting order status update")
 
 	// Получаем заказы, которые не обрабатываются (processing = FALSE)
@@ -99,7 +108,7 @@ func (s *OrderService) UpdateOrderStatuses() {
 		}
 
 		// Обработка заказа
-		s.processOrder(order)
+		s.processOrder(ctx, order)
 
 		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
 		err = s.storage.UnlockOrder(order.OrderNumber)
@@ -111,8 +120,8 @@ func (s *OrderService) UpdateOrderStatuses() {
 }
 
 // processOrder - обрабатывает конкретный заказ
-func (s *OrderService) processOrder(order domain.Order) {
-	accrual, status, err := s.accrualClient.GetOrderAccrual(order.OrderNumber)
+func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
+	accrual, status, err := s.accrualClient.GetOrderAccrual(ctx, order.OrderNumber)
 	if err != nil {
 		s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
 		return

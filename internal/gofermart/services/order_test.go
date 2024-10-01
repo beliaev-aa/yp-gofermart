@@ -4,6 +4,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/tests"
+	"context"
 	"errors"
 	"go.uber.org/zap"
 	"testing"
@@ -381,7 +382,9 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 			tc.MockSetup(mockStorage, accrualMock)
 
 			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
-			orderService.UpdateOrderStatuses()
+			ctx, cancel := context.WithCancel(context.Background())
+			orderService.UpdateOrderStatuses(ctx)
+			cancel()
 
 			if err := tc.CheckCalled(mockStorage); err != nil {
 				t.Errorf("Method call mismatch: %v", err)
@@ -498,7 +501,9 @@ func TestOrderService_ProcessOrder(t *testing.T) {
 			tc.MockSetup(mockStorage, accrualMock)
 
 			orderService := NewOrderService(accrualMock, mockStorage, zap.NewNop())
-			orderService.processOrder(tc.Order)
+			ctx, cancel := context.WithCancel(context.Background())
+			orderService.processOrder(ctx, tc.Order)
+			cancel()
 
 			if err := tc.CheckCalled(mockStorage); err != nil {
 				t.Errorf("Method call mismatch: %v", err)

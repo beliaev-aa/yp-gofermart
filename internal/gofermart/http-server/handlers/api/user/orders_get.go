@@ -14,7 +14,7 @@ type (
 	// OrdersGetHandler - обрабатывает запросы на получение списка загруженных пользователем номеров заказов.
 	OrdersGetHandler struct {
 		logger            *zap.Logger
-		orderService      *services.OrderService
+		orderService      services.OrderServiceInterface
 		usernameExtractor utils.UsernameExtractor
 	}
 	// OrderResponse — структура для представления заказа в формате JSON.
@@ -27,7 +27,7 @@ type (
 )
 
 // NewOrdersGetHandler - создает новый обработчик для получения заказов.
-func NewOrdersGetHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersGetHandler {
+func NewOrdersGetHandler(orderService services.OrderServiceInterface, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersGetHandler {
 	return &OrdersGetHandler{
 		logger:            logger,
 		orderService:      orderService,

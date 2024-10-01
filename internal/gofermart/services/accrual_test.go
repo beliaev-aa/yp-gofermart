@@ -3,6 +3,7 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
+	"context"
 	"errors"
 	"go.uber.org/zap"
 	"net/http"
@@ -142,7 +143,9 @@ func TestGetOrderAccrual(t *testing.T) {
 				logger:  logger,
 			}
 
-			accrual, status, err := service.GetOrderAccrual(tc.orderNumber)
+			ctx, cancel := context.WithCancel(context.Background())
+			accrual, status, err := service.GetOrderAccrual(ctx, tc.orderNumber)
+			cancel()
 
 			if accrual != tc.expectedAccrual {
 				t.Errorf("Expected accrual %v, got %v", tc.expectedAccrual, accrual)
@@ -224,7 +227,9 @@ func TestProcessResponse(t *testing.T) {
 				logger:  logger,
 			}
 
-			accrual, status, err := service.GetOrderAccrual(tc.orderNumber)
+			ctx, cancel := context.WithCancel(context.Background())
+			accrual, status, err := service.GetOrderAccrual(ctx, tc.orderNumber)
+			cancel()
 
 			if accrual != tc.expectedAccrual {
 				t.Errorf("Expected accrual %v, got %v", tc.expectedAccrual, accrual)

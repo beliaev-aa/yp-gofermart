@@ -2,6 +2,6 @@ package services
 
 type AppServices struct {
 	AuthService  *AuthService
-	OrderService *OrderService
+	OrderService OrderServiceInterface
 	UserService  *UserService
 }

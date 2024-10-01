@@ -14,12 +14,12 @@ import (
 // OrdersPostHandler - представляет HTTP-обработчик для загрузки номера заказа пользователем.
 type OrdersPostHandler struct {
 	logger            *zap.Logger
-	orderService      *services.OrderService
+	orderService      services.OrderServiceInterface
 	usernameExtractor utils.UsernameExtractor
 }
 
 // NewOrdersPostHandler - создает новый экземпляр OrdersPostHandler с указанными зависимостями.
-func NewOrdersPostHandler(orderService *services.OrderService, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersPostHandler {
+func NewOrdersPostHandler(orderService services.OrderServiceInterface, usernameExtractor utils.UsernameExtractor, logger *zap.Logger) *OrdersPostHandler {
 	return &OrdersPostHandler{
 		logger:            logger,
 		orderService:      orderService,

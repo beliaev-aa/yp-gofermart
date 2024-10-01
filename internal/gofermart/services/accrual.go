@@ -3,15 +3,15 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
+	"context"
 	"encoding/json"
 	"go.uber.org/zap"
 	"net/http"
-	"time"
 )
 
 // AccrualService - представляет интерфейс для работы с внешней системой начислений
 type AccrualService interface {
-	GetOrderAccrual(orderNumber string) (float64, string, error)
+	GetOrderAccrual(ctx context.Context, orderNumber string) (float64, string, error)
 }
 
 // RealAccrualService - реализация интерфейса AccrualService
@@ -29,15 +29,15 @@ func NewAccrualService(BaseURL string, logger *zap.Logger) AccrualService {
 }
 
 // GetOrderAccrual - основная функция для получения информации о заказе и обработки ответа
-func (s *RealAccrualService) GetOrderAccrual(orderNumber string) (float64, string, error) {
+func (s *RealAccrualService) GetOrderAccrual(ctx context.Context, orderNumber string) (float64, string, error) {
 	url := s.BaseURL + "/api/orders/" + orderNumber
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		s.logger.Error("Failed to create new request", zap.Error(err))
 		return 0, "", err
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		s.logger.Error("Request to accrual system failed", zap.Error(err))
