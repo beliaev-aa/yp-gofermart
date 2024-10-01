@@ -33,8 +33,8 @@ func TestOrdersPostHandler_ServeHTTP(t *testing.T) {
 				return "", http.ErrNoCookie
 			},
 			body:               validOrderNumber,
-			expectedStatusCode: http.StatusUnauthorized,
-			expectedBody:       "Unauthorized\n",
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedBody:       "Internal Server Error\n",
 		},
 		{
 			name: "Invalid_Request_Body",

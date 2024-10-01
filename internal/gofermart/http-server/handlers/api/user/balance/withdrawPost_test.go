@@ -35,8 +35,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "", http.ErrNoCookie
 			},
-			expectedStatusCode: http.StatusUnauthorized,
-			expectedResponse:   "Unauthorized\n",
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedResponse:   "Internal Server Error\n",
 		},
 		{
 			name: "Invalid_Request_Format",
@@ -53,7 +53,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 				}
 			},
 			expectedStatusCode: http.StatusInternalServerError,
-			expectedResponse:   "Internal server error\n",
+			expectedResponse:   "Internal Server Error\n",
 		},
 		{
 			name: "Invalid_Order_Number_Format",
@@ -125,7 +125,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 				}
 			},
 			expectedStatusCode: http.StatusInternalServerError,
-			expectedResponse:   "Internal server error\n",
+			expectedResponse:   "Internal Server Error\n",
 		},
 	}
 

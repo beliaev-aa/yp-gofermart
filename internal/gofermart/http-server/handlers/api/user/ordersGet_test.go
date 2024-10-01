@@ -29,7 +29,7 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "", http.ErrNoCookie
 			},
-			expectedStatusCode: http.StatusUnauthorized,
+			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
 			name: "Successful_Order_Response",

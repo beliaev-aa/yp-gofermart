@@ -37,7 +37,7 @@ func NewWithdrawPostHandler(userService *services.UserService, usernameExtractor
 func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, "Insufficient funds", http.StatusPaymentRequired)
 		default:
 			h.logger.Error("Failed to process withdrawal", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 		return
 	}

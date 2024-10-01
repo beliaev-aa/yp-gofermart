@@ -37,7 +37,7 @@ func NewWithdrawalsGetHandler(userService *services.UserService, usernameExtract
 func (h *WithdrawalsGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
