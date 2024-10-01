@@ -14,11 +14,16 @@ services:
     ports:
       - "${GOPHERMART_PORT}:${GOPHERMART_PORT}"
     volumes:
-      - ./docker/wait-for-it.sh:/app/wait-for-it.sh:ro
-    entrypoint: ["/app/wait-for-it.sh", "db:${POSTGRES_PORT}", "--"]
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     command: ["./gophermart", "-d", "${GOPHERMART_DSN}", "-r", "http://accrual:${ACCRUAL_PORT}", "-a", "0.0.0.0:${GOPHERMART_PORT}"]
     networks:
       - default
+
+  wait:
+    image: dokku/wait
+    depends_on:
+      - db
+    command: ["db:${POSTGRES_PORT}"]
 
   accrual:
     container_name: gofermart-accrual
