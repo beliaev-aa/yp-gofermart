@@ -35,14 +35,14 @@ func NewIndexGetHandler(userService *services.UserService, usernameExtractor uti
 func (h *IndexGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	login, err := h.usernameExtractor.ExtractUsernameFromContext(r, h.logger)
 	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	balance, err := h.userService.GetBalance(login)
 	if err != nil {
 		h.logger.Error("Failed to get balance", zap.Error(err))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, "Failed to get balance", http.StatusInternalServerError)
 		return
 	}
 

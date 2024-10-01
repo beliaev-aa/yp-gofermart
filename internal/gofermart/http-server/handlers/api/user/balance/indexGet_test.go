@@ -5,6 +5,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
 	"errors"
+	"github.com/google/go-cmp/cmp"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,8 +29,8 @@ func TestIndexGetHandler_ServeHTTP(t *testing.T) {
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "", http.ErrNoCookie
 			},
-			expectedStatusCode: http.StatusUnauthorized,
-			expectedBody:       "Unauthorized\n",
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedBody:       "Internal Server Error\n",
 		},
 		{
 			name: "Internal_Server_Error_On_GetBalance",
@@ -42,7 +43,7 @@ func TestIndexGetHandler_ServeHTTP(t *testing.T) {
 				}
 			},
 			expectedStatusCode: http.StatusInternalServerError,
-			expectedBody:       "Internal Server Error\n",
+			expectedBody:       "Failed to get balance\n",
 		},
 		{
 			name: "Successful_Balance_Response",
@@ -88,7 +89,8 @@ func TestIndexGetHandler_ServeHTTP(t *testing.T) {
 			}
 
 			if strings.TrimSpace(rr.Body.String()) != strings.TrimSpace(tc.expectedBody) {
-				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
+				diff := cmp.Diff(tc.expectedBody, rr.Body.String())
+				t.Errorf("body mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
