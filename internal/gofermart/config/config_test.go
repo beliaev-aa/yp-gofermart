@@ -1,7 +1,6 @@
 package config
 
 import (
-	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"errors"
 	"flag"
 	"github.com/google/go-cmp/cmp"
@@ -14,7 +13,7 @@ func TestLoadConfig(t *testing.T) {
 		name           string
 		envVariables   map[string]string
 		args           []string
-		expectedConfig *domain.Config
+		expectedConfig *Config
 		expectedErr    error
 	}
 
@@ -33,7 +32,7 @@ func TestLoadConfig(t *testing.T) {
 				"-r", "flag_accrual_system_address",
 				"-s", "flag_jwt_secret",
 			},
-			expectedConfig: &domain.Config{
+			expectedConfig: &Config{
 				RunAddress:           "env_run_address",
 				DatabaseURI:          "env_database_uri",
 				AccrualSystemAddress: "env_accrual_system_address",
@@ -49,7 +48,7 @@ func TestLoadConfig(t *testing.T) {
 				"-r", "flag_accrual_system_address",
 				"-s", "flag_jwt_secret",
 			},
-			expectedConfig: &domain.Config{
+			expectedConfig: &Config{
 				RunAddress:           "flag_run_address",
 				DatabaseURI:          "flag_database_uri",
 				AccrualSystemAddress: "flag_accrual_system_address",
@@ -105,14 +104,14 @@ func TestLoadConfig(t *testing.T) {
 func TestValidateConfig(t *testing.T) {
 	type testCase struct {
 		name        string
-		config      *domain.Config
+		config      *Config
 		expectedErr error
 	}
 
 	testCases := []testCase{
 		{
 			name: "Valid_Config",
-			config: &domain.Config{
+			config: &Config{
 				RunAddress:           "localhost:8080",
 				DatabaseURI:          "postgres://user:pass@localhost/db",
 				AccrualSystemAddress: "http://localhost:8080",
@@ -121,7 +120,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "Missing_AccrualSystemAddress",
-			config: &domain.Config{
+			config: &Config{
 				RunAddress:  "localhost:8080",
 				DatabaseURI: "postgres://user:pass@localhost/db",
 			},
@@ -129,7 +128,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "Missing_DatabaseURI",
-			config: &domain.Config{
+			config: &Config{
 				RunAddress:           "localhost:8080",
 				AccrualSystemAddress: "http://localhost:8080",
 			},
@@ -137,7 +136,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "Missing_RunAddress",
-			config: &domain.Config{
+			config: &Config{
 				DatabaseURI:          "postgres://user:pass@localhost/db",
 				AccrualSystemAddress: "http://localhost:8080",
 			},

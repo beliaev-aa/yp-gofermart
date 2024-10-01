@@ -1,7 +1,6 @@
 package config
 
 import (
-	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"errors"
 	"flag"
 	"os"
@@ -20,9 +19,17 @@ var (
 	ErrRunAddressConfig = errors.New("RunAddress is not configured")
 )
 
+// Config - описывает конфигурацию приложения
+type Config struct {
+	RunAddress           string
+	DatabaseURI          string
+	AccrualSystemAddress string
+	JWTSecret            string
+}
+
 // LoadConfig - загружает конфигурацию, отдает приоритет переменным окружения
-func LoadConfig() (*domain.Config, error) {
-	cfg := &domain.Config{}
+func LoadConfig() (*Config, error) {
+	cfg := &Config{}
 
 	flag.StringVar(&cfg.RunAddress, "a", defaultRunAddress, "Address and port to run the HTTP server")
 	flag.StringVar(&cfg.DatabaseURI, "d", defaultDatabaseURI, "PostgreSQL DSN")
@@ -54,7 +61,7 @@ func LoadConfig() (*domain.Config, error) {
 }
 
 // validateConfig - проверяет обязательные параметры конфигурации
-func validateConfig(cfg *domain.Config) error {
+func validateConfig(cfg *Config) error {
 	if cfg.AccrualSystemAddress == "" {
 		return ErrAccrualConfig
 	}
