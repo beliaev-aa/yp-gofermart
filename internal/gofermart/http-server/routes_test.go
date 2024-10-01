@@ -3,7 +3,6 @@ package httpserver
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
-	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"net/http"
@@ -97,31 +96,6 @@ func TestRegisterRoutes(t *testing.T) {
 			}
 			if tt.expectedHeader != "" && rr.Header().Get("Location") != tt.expectedHeader {
 				t.Errorf("Unexpected header(Location) for %s: got %v, want %v", tt.name, rr.Header().Get("Location"), tt.expectedHeader)
-			}
-
-			if tt.path == "/api/shorten" && tt.expectedCode == http.StatusCreated {
-				var resp map[string]string
-				err = json.NewDecoder(rr.Body).Decode(&resp)
-				if err != nil {
-					t.Fatalf("could not decode response: %v", err)
-				}
-				if _, exists := resp["result"]; !exists {
-					t.Errorf("Expected 'result' key in response, but got: %v", resp)
-				}
-			}
-
-			if tt.path == "/api/shorten/batch" && tt.expectedCode == http.StatusCreated {
-				var responses []map[string]string
-				err = json.NewDecoder(rr.Body).Decode(&responses)
-				if err != nil {
-					t.Fatalf("could not decode response: %v", err)
-				}
-				if len(responses) != 2 {
-					t.Errorf("Expected 2 responses, got %d", len(responses))
-				}
-				if responses[0]["correlation_id"] != "123" || responses[1]["correlation_id"] != "124" {
-					t.Errorf("Unexpected correlation ids: %v, %v", responses[0]["correlation_id"], responses[1]["correlation_id"])
-				}
 			}
 		})
 	}
