@@ -4,8 +4,10 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"encoding/json"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,9 @@ import (
 )
 
 func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger := zap.NewNop()
 
 	testCases := []struct {
@@ -72,7 +77,7 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 
-	accrualMock := &tests.AccrualServiceMock{}
+	accrualMock := mocks.NewMockAccrualService(ctrl)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

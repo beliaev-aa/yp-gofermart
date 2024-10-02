@@ -7,9 +7,8 @@ package mocks
 import (
 	domain "beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockOrderServiceInterface is a mock of OrderServiceInterface interface.
