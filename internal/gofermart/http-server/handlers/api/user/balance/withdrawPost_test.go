@@ -4,9 +4,10 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"bytes"
-	"encoding/json"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,11 +15,14 @@ import (
 )
 
 func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
 	logger := zap.NewNop()
 
 	type testCase struct {
 		name               string
-		requestBody        WithdrawPostRequest
+		requestBody        string
 		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
 		mockSetup          func(m *tests.MockStorage)
 		expectedStatusCode int
@@ -27,11 +31,17 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			name: "Unauthorized_Access",
-			requestBody: WithdrawPostRequest{
-				Order: "12345678903",
-				Sum:   100.50,
+			name:        "Malformed_JSON_Body",
+			requestBody: `{"Order": "12345678903", "Sum": "invalid_number"}`, // Invalid JSON: Sum should be a float
+			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
+				return "test_user", nil
 			},
+			expectedStatusCode: http.StatusBadRequest,
+			expectedResponse:   "Invalid request format\n",
+		},
+		{
+			name:        "Unauthorized_Access",
+			requestBody: `{"Order": "12345678903", "Sum": 100.50}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "", http.ErrNoCookie
 			},
@@ -39,11 +49,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			expectedResponse:   "Internal Server Error\n",
 		},
 		{
-			name: "Invalid_Request_Format",
-			requestBody: WithdrawPostRequest{
-				Order: "",
-				Sum:   0.0,
-			},
+			name:        "Invalid_Request_Format",
+			requestBody: `{"Order": "", "Sum": 0.0}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
@@ -56,11 +63,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			expectedResponse:   "Internal Server Error\n",
 		},
 		{
-			name: "Invalid_Order_Number_Format",
-			requestBody: WithdrawPostRequest{
-				Order: "123456",
-				Sum:   100.50,
-			},
+			name:        "Invalid_Order_Number_Format",
+			requestBody: `{"Order": "123456", "Sum": 100.50}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
@@ -68,11 +72,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			expectedResponse:   "Invalid order number format\n",
 		},
 		{
-			name: "Insufficient_Funds",
-			requestBody: WithdrawPostRequest{
-				Order: "79927398713",
-				Sum:   150.00,
-			},
+			name:        "Insufficient_Funds",
+			requestBody: `{"Order": "79927398713", "Sum": 150.00}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
@@ -85,11 +86,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			expectedResponse:   "Insufficient funds\n",
 		},
 		{
-			name: "Successful_Withdrawal",
-			requestBody: WithdrawPostRequest{
-				Order: "79927398713",
-				Sum:   100.50,
-			},
+			name:        "Successful_Withdrawal",
+			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
@@ -108,11 +106,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			expectedResponse:   "",
 		},
 		{
-			name: "Internal_Server_Error_On_Withdraw",
-			requestBody: WithdrawPostRequest{
-				Order: "79927398713",
-				Sum:   100.50,
-			},
+			name:        "Internal_Server_Error_On_Withdraw",
+			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
 			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
 				return "test_user", nil
 			},
@@ -131,9 +126,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor := &tests.MockUsernameExtractor{
-				ExtractFn: tc.mockExtractFn,
-			}
+			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
 
 			mockStorage := &tests.MockStorage{}
 			if tc.mockSetup != nil {
@@ -144,11 +137,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 
 			handler := NewWithdrawPostHandler(userService, mockExtractor, logger)
 
-			body, err := json.Marshal(tc.requestBody)
-			if err != nil {
-				t.Fatalf("failed to marshal request body: %v", err)
-			}
-			req := httptest.NewRequest("POST", "/withdraw", bytes.NewBuffer(body))
+			req := httptest.NewRequest("POST", "/withdraw", bytes.NewBufferString(tc.requestBody))
 
 			rr := httptest.NewRecorder()
 

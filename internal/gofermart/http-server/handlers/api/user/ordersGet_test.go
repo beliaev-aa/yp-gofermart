@@ -20,6 +20,8 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger := zap.NewNop()
+	accrualMock := mocks.NewMockAccrualService(ctrl)
+	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
 
 	testCases := []struct {
 		name               string
@@ -77,13 +79,9 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 		},
 	}
 
-	accrualMock := mocks.NewMockAccrualService(ctrl)
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor := &tests.MockUsernameExtractor{
-				ExtractFn: tc.mockExtractFn,
-			}
+			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
 
 			mockOrderService := services.NewOrderService(accrualMock, &tests.MockStorage{
 				GetUserByLoginFn: func(login string) (*domain.User, error) {
@@ -97,7 +95,6 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 			handler := NewOrdersGetHandler(mockOrderService, mockExtractor, logger)
 
 			req := httptest.NewRequest("GET", "/orders", nil)
-
 			rr := httptest.NewRecorder()
 
 			handler.ServeHTTP(rr, req)

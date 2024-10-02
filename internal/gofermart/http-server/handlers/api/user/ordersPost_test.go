@@ -5,7 +5,9 @@ import (
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +16,12 @@ import (
 )
 
 func TestOrdersPostHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 	logger := zap.NewNop()
 
 	validOrderNumber := "79927398713"
+	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
 
 	testCases := []struct {
 		name               string
@@ -138,9 +143,7 @@ func TestOrdersPostHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor := &tests.MockUsernameExtractor{
-				ExtractFn: tc.mockExtractFn,
-			}
+			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
 
 			mockStorage := &tests.MockStorage{}
 			if tc.mockSetup != nil {

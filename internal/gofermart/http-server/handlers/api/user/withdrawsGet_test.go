@@ -4,8 +4,10 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"encoding/json"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,9 @@ import (
 )
 
 func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
 	logger := zap.NewNop()
 
 	testWithdrawals := []domain.Withdrawal{
@@ -79,9 +84,7 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor := &tests.MockUsernameExtractor{
-				ExtractFn: tc.mockExtractFn,
-			}
+			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
 
 			mockUserService := services.NewUserService(&tests.MockStorage{
 				GetUserByLoginFn: func(login string) (*domain.User, error) {
