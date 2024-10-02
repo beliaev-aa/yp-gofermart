@@ -3,7 +3,9 @@ package httpserver
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
 	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"github.com/go-chi/chi/v5"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,12 +16,13 @@ import (
 func TestRegisterRoutes(t *testing.T) {
 	logger := zap.NewNop()
 	storageMock := &tests.MockStorage{}
-	accrualMock := &tests.AccrualServiceMock{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
 	appServices := &services.AppServices{
 		UserService:  services.NewUserService(storageMock, logger),
 		AuthService:  services.NewAuthService([]byte("secret"), logger, storageMock),
-		OrderService: services.NewOrderService(accrualMock, storageMock, logger),
+		OrderService: mocks.NewMockOrderServiceInterface(ctrl),
 	}
 
 	r := chi.NewRouter()
