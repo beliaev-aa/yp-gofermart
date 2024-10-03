@@ -1,4 +1,4 @@
-package storage
+package repository
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
@@ -17,14 +17,12 @@ type UserRepository interface {
 }
 
 type UserRepositoryPostgres struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	*BaseRepository
 }
 
 func NewUserRepository(db *gorm.DB, logger *zap.Logger) UserRepository {
 	return &UserRepositoryPostgres{
-		db:     db,
-		logger: logger,
+		BaseRepository: NewBaseRepository(db, logger),
 	}
 }
 

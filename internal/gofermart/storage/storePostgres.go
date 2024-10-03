@@ -4,6 +4,7 @@ package storage
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
+	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -36,9 +37,9 @@ func NewStorage(dsn string, logger *zap.Logger) (*Storage, error) {
 	}
 
 	return &Storage{
-		UserRepo:       NewUserRepository(db, logger),
-		OrderRepo:      NewOrderRepository(db, logger),
-		WithdrawalRepo: NewWithdrawalRepository(db, logger),
+		UserRepo:       repository.NewUserRepository(db, logger),
+		OrderRepo:      repository.NewOrderRepository(db, logger),
+		WithdrawalRepo: repository.NewWithdrawalRepository(db, logger),
 	}, nil
 }
 

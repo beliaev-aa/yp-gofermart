@@ -3,7 +3,7 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
+	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"errors"
 	"go.uber.org/zap"
 	"time"
@@ -12,12 +12,12 @@ import (
 // UserService - отвечает за операции с пользователями, включая получение баланса и вывод средств
 type UserService struct {
 	logger         *zap.Logger
-	userRepo       storage.UserRepository
-	withdrawalRepo storage.WithdrawalRepository
+	userRepo       repository.UserRepository
+	withdrawalRepo repository.WithdrawalRepository
 }
 
 // NewUserService - создает новый экземпляр UserService
-func NewUserService(userRepo storage.UserRepository, withdrawalRepo storage.WithdrawalRepository, logger *zap.Logger) *UserService {
+func NewUserService(userRepo repository.UserRepository, withdrawalRepo repository.WithdrawalRepository, logger *zap.Logger) *UserService {
 	return &UserService{
 		logger:         logger,
 		userRepo:       userRepo,

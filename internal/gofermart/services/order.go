@@ -3,7 +3,7 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
+	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"context"
 	"errors"
 	"go.uber.org/zap"
@@ -22,12 +22,12 @@ type OrderServiceInterface interface {
 type OrderService struct {
 	accrualClient AccrualService
 	logger        *zap.Logger
-	orderRepo     storage.OrderRepository
-	userRepo      storage.UserRepository
+	orderRepo     repository.OrderRepository
+	userRepo      repository.UserRepository
 }
 
 // NewOrderService - создает новый экземпляр OrderService.
-func NewOrderService(accrualClient AccrualService, orderRepo storage.OrderRepository, userRepo storage.UserRepository, logger *zap.Logger) *OrderService {
+func NewOrderService(accrualClient AccrualService, orderRepo repository.OrderRepository, userRepo repository.UserRepository, logger *zap.Logger) *OrderService {
 	return &OrderService{
 		accrualClient: accrualClient,
 		logger:        logger,

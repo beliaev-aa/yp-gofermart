@@ -1,4 +1,4 @@
-package storage
+package repository
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
@@ -21,14 +21,12 @@ type OrderRepository interface {
 }
 
 type OrderRepositoryPostgres struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	*BaseRepository
 }
 
 func NewOrderRepository(db *gorm.DB, logger *zap.Logger) OrderRepository {
 	return &OrderRepositoryPostgres{
-		db:     db,
-		logger: logger,
+		BaseRepository: NewBaseRepository(db, logger),
 	}
 }
 

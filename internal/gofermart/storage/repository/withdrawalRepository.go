@@ -1,4 +1,4 @@
-package storage
+package repository
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
@@ -12,14 +12,12 @@ type WithdrawalRepository interface {
 }
 
 type WithdrawalRepositoryPostgres struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	*BaseRepository
 }
 
 func NewWithdrawalRepository(db *gorm.DB, logger *zap.Logger) WithdrawalRepository {
 	return &WithdrawalRepositoryPostgres{
-		db:     db,
-		logger: logger,
+		BaseRepository: NewBaseRepository(db, logger),
 	}
 }
 

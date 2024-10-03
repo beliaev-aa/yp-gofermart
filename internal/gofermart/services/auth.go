@@ -3,7 +3,7 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/internal/gofermart/storage"
+	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"errors"
 	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
@@ -14,10 +14,10 @@ import (
 type AuthService struct {
 	logger    *zap.Logger
 	tokenAuth *jwtauth.JWTAuth
-	userRepo  storage.UserRepository
+	userRepo  repository.UserRepository
 }
 
-func NewAuthService(jwtSecret []byte, userRepo storage.UserRepository, logger *zap.Logger) *AuthService {
+func NewAuthService(jwtSecret []byte, userRepo repository.UserRepository, logger *zap.Logger) *AuthService {
 	tokenAuth := jwtauth.New("HS256", jwtSecret, nil)
 	return &AuthService{
 		logger:    logger,
