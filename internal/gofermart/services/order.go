@@ -103,76 +103,59 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 	}
 
 	for _, order := range orders {
-		// Блокируем заказ для обработки, устанавливаем processing = TRUE
-		err := s.orderRepo.LockOrderForProcessing(nil, order.OrderNumber)
+		// Начинаем новую транзакцию для обработки каждого заказа
+		tx, err := s.userRepo.BeginTransaction()
 		if err != nil {
-			s.logger.Error("Failed to lock order for processing", zap.String("order", order.OrderNumber), zap.Error(err))
+			s.logger.Error("Failed to start transaction", zap.Error(err))
 			continue
 		}
 
-		// Обработка заказа
-		s.processOrder(ctx, order)
+		success := s.processOrder(ctx, order, tx)
 
-		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
-		err = s.orderRepo.UnlockOrder(nil, order.OrderNumber)
-		if err != nil {
-			s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
-			continue
+		if success {
+			if err := s.userRepo.Commit(tx); err != nil {
+				s.logger.Error("Failed to commit transaction", zap.Error(err))
+			}
+		} else {
+			if err := s.userRepo.Rollback(tx); err != nil {
+				s.logger.Error("Failed to rollback transaction", zap.Error(err))
+			}
 		}
 	}
 }
 
-// processOrder - обрабатывает конкретный заказ
-func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
+// processOrder - обрабатывает конкретный заказ в рамках транзакции
+func (s *OrderService) processOrder(ctx context.Context, order domain.Order, tx *gorm.DB) bool {
 	accrual, status, err := s.accrualClient.GetOrderAccrual(ctx, order.OrderNumber)
 	if err != nil {
 		s.logger.Warn("Failed to fetch order accrual", zap.String("order", order.OrderNumber), zap.Error(err))
-		return
+		return false
 	}
 
 	order.OrderStatus = status
 	order.Accrual = accrual
 
-	tx, err := s.userRepo.BeginTransaction()
-	if err != nil {
-		s.logger.Error("Failed to start transaction", zap.Error(err))
-		return
-	}
-	defer func() {
-		if p := recover(); p != nil {
-			err := s.userRepo.Rollback(tx)
-			if err != nil {
-				s.logger.Error("Failed to rollback", zap.Error(err))
-				return
-			}
-			panic(p)
-		} else if err != nil {
-			err := s.userRepo.Rollback(tx)
-			if err != nil {
-				s.logger.Error("Failed to rollback", zap.Error(err))
-				return
-			}
-		} else {
-			err = s.userRepo.Commit(tx)
-			if err != nil {
-				s.logger.Error("Failed to commit transaction", zap.Error(err))
-			}
-		}
-	}()
-
-	err = s.orderRepo.UpdateOrder(tx, order)
-	if err != nil {
+	if err := s.orderRepo.UpdateOrder(tx, order); err != nil {
 		s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
-		return
+		return false
 	}
 
 	if status == domain.OrderStatusProcessed {
-		err = s.UpdateUserBalance(tx, order.UserID, accrual)
-		if err != nil {
+		if err := s.UpdateUserBalance(tx, order.UserID, accrual); err != nil {
 			s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
-			return
+			return false
 		}
 	}
+
+	// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
+	if err := s.orderRepo.UnlockOrder(tx, order.OrderNumber); err != nil {
+		s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
+		return false
+	}
+
+	s.logger.Info("Order processed successfully", zap.String("order", order.OrderNumber))
+
+	return true
 }
 
 // UpdateUserBalance - обновляет баланс пользователя.
