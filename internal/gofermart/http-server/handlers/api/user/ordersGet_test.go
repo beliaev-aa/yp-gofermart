@@ -3,11 +3,11 @@ package user
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"encoding/json"
 	"errors"
 	"github.com/golang/mock/gomock"
+	"github.com/google/go-cmp/cmp"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -21,35 +21,36 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 
 	logger := zap.NewNop()
 	accrualMock := mocks.NewMockAccrualService(ctrl)
-	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
+	mockUsernameExtractor := mocks.NewMockUsernameExtractor(ctrl)
+	mockOrderRepo := mocks.NewMockOrderRepository(ctrl)
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
 
 	testCases := []struct {
 		name               string
-		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
-		orders             []domain.Order
-		mockError          error
+		setupMocks         func()
 		expectedStatusCode int
 		expectedResponse   []OrderResponse
 	}{
 		{
 			name: "Unauthorized_Access",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "", http.ErrNoCookie
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("", http.ErrNoCookie)
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
 			name: "Successful_Order_Response",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			orders: []domain.Order{
-				{
-					OrderNumber: "123",
-					OrderStatus: domain.OrderStatusProcessed,
-					Accrual:     150.5,
-					UploadedAt:  time.Now(),
-				},
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return([]domain.Order{
+					{
+						OrderNumber: "123",
+						OrderStatus: domain.OrderStatusProcessed,
+						Accrual:     150.5,
+						UploadedAt:  time.Now(),
+					},
+				}, nil)
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: []OrderResponse{
@@ -63,36 +64,30 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "No_Orders",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return([]domain.Order{}, nil)
 			},
-			orders:             []domain.Order{},
 			expectedStatusCode: http.StatusNoContent,
 		},
 		{
 			name: "Internal_Server_Error",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return(nil, errors.New("database error"))
 			},
-			mockError:          errors.New("database error"),
 			expectedStatusCode: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
+			tc.setupMocks()
+			mockOrderService := services.NewOrderService(accrualMock, mockOrderRepo, mockUserRepo, logger)
 
-			mockOrderService := services.NewOrderService(accrualMock, &tests.MockStorage{
-				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				},
-				GetOrdersByUserIDFn: func(userID int) ([]domain.Order, error) {
-					return tc.orders, tc.mockError
-				},
-			}, logger)
-
-			handler := NewOrdersGetHandler(mockOrderService, mockExtractor, logger)
+			handler := NewOrdersGetHandler(mockOrderService, mockUsernameExtractor, logger)
 
 			req := httptest.NewRequest("GET", "/orders", nil)
 			rr := httptest.NewRecorder()
@@ -115,7 +110,8 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 				}
 				for i, expectedItem := range tc.expectedResponse {
 					if gotResponse[i] != expectedItem {
-						t.Errorf("expected response %v, got %v", expectedItem, gotResponse[i])
+						diff := cmp.Diff(expectedItem, gotResponse[i])
+						t.Errorf("expected response mismatch (-want +got):\n%s", diff)
 					}
 				}
 			}

@@ -12,24 +12,24 @@ import (
 )
 
 type AuthService struct {
-	tokenAuth *jwtauth.JWTAuth
 	logger    *zap.Logger
-	storage   storage.Storage
+	tokenAuth *jwtauth.JWTAuth
+	userRepo  storage.UserRepository
 }
 
-func NewAuthService(jwtSecret []byte, logger *zap.Logger, storage storage.Storage) *AuthService {
+func NewAuthService(jwtSecret []byte, userRepo storage.UserRepository, logger *zap.Logger) *AuthService {
 	tokenAuth := jwtauth.New("HS256", jwtSecret, nil)
 	return &AuthService{
-		tokenAuth: tokenAuth,
 		logger:    logger,
-		storage:   storage,
+		tokenAuth: tokenAuth,
+		userRepo:  userRepo,
 	}
 }
 
 func (s *AuthService) RegisterUser(login, password string) error {
 	s.logger.Info("Attempting to register user", zap.String("login", login))
 
-	user, _ := s.storage.GetUserByLogin(login)
+	user, _ := s.userRepo.GetUserByLogin(login)
 	if user != nil {
 		s.logger.Warn("Login already taken", zap.String("login", login))
 		return gofermartErrors.ErrLoginAlreadyExists
@@ -42,7 +42,7 @@ func (s *AuthService) RegisterUser(login, password string) error {
 	}
 
 	url := &domain.User{Login: login, Password: string(hashedPassword)}
-	err = s.storage.SaveUser(*url)
+	err = s.userRepo.SaveUser(*url)
 	if err != nil {
 		s.logger.Error("Error registering user", zap.String("login", login), zap.Error(err))
 		return err
@@ -55,7 +55,7 @@ func (s *AuthService) RegisterUser(login, password string) error {
 func (s *AuthService) AuthenticateUser(login, password string) (bool, error) {
 	s.logger.Info("Attempting to authenticate user", zap.String("login", login))
 
-	user, err := s.storage.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(login)
 	if err != nil {
 		if errors.Is(err, gofermartErrors.ErrUserNotFound) {
 			s.logger.Warn("User not found", zap.String("login", login))

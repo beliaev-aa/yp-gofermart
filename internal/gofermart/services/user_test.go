@@ -3,280 +3,217 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"testing"
 	"time"
 )
 
-func TestNewUserService(t *testing.T) {
-	t.Run("NewUserService_CreatesService", func(t *testing.T) {
-		mockStore := &tests.MockStorage{}
-		logger := zap.NewNop()
-		service := NewUserService(mockStore, logger)
+func TestUserService_GetBalance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		if service.storage != mockStore || service.logger != logger {
-			t.Errorf("Expected UserService to be initialized with provided storage and logger")
-		}
-	})
-}
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockWithdrawalRepo := mocks.NewMockWithdrawalRepository(ctrl)
+	logger := zap.NewNop()
+	userService := NewUserService(mockUserRepo, mockWithdrawalRepo, logger)
 
-func TestGetBalance(t *testing.T) {
 	testCases := []struct {
-		Name          string
-		MockReturn    func() (*domain.UserBalance, error)
-		ExpectedError error
-		Expected      *domain.UserBalance
+		name           string
+		login          string
+		setupMocks     func()
+		expectedError  error
+		expectedResult *domain.UserBalance
 	}{
 		{
-			Name: "GetBalance_Success",
-			MockReturn: func() (*domain.UserBalance, error) {
-				return &domain.UserBalance{Current: 100, Withdrawn: 50}, nil
+			name:  "GetBalance_Success",
+			login: "user1",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserBalance("user1").Return(&domain.UserBalance{Current: 100.0}, nil)
 			},
-			ExpectedError: nil,
-			Expected:      &domain.UserBalance{Current: 100, Withdrawn: 50},
+			expectedError:  nil,
+			expectedResult: &domain.UserBalance{Current: 100.0},
 		},
 		{
-			Name: "GetBalance_Failure",
-			MockReturn: func() (*domain.UserBalance, error) {
-				return nil, errors.New("error")
+			name:  "GetBalance_Error",
+			login: "user1",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserBalance("user1").Return(nil, errors.New("db error"))
 			},
-			ExpectedError: errors.New("error"),
-			Expected:      nil,
+			expectedError:  errors.New("db error"),
+			expectedResult: nil,
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			mockStore := &tests.MockStorage{
-				GetUserBalanceFn: func(login string) (userBalance *domain.UserBalance, err error) {
-					return tc.MockReturn()
-				},
-			}
-			logger := zap.NewNop()
-			service := NewUserService(mockStore, logger)
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
 
-			balance, err := service.GetBalance("test_user")
+			result, err := userService.GetBalance(tc.login)
 
-			if err != nil && tc.ExpectedError == nil {
+			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
-			} else if err == nil && tc.ExpectedError != nil {
+			} else if err == nil && tc.expectedError != nil {
 				t.Errorf("Expected error, got none")
+			} else if err != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 
-			if balance != nil && tc.Expected != nil {
-				if balance.Current != tc.Expected.Current || balance.Withdrawn != tc.Expected.Withdrawn {
-					t.Errorf("Expected balance %v, got %v", tc.Expected, balance)
-				}
+			if result != nil && tc.expectedResult != nil && result.Current != tc.expectedResult.Current {
+				t.Errorf("Expected result %v, got %v", tc.expectedResult, result)
 			}
 		})
 	}
 }
 
-func TestWithdraw(t *testing.T) {
+func TestUserService_Withdraw(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockWithdrawalRepo := mocks.NewMockWithdrawalRepository(ctrl)
+	logger := zap.NewNop()
+	userService := NewUserService(mockUserRepo, mockWithdrawalRepo, logger)
+
 	testCases := []struct {
-		Name              string
-		MockReturn        func() (*domain.User, error)
-		MockAddWithdrawal func() error
-		MockUpdateBalance func() error
-		Sum               float64
-		ExpectedError     error
+		name          string
+		login         string
+		order         string
+		sum           float64
+		setupMocks    func()
+		expectedError error
 	}{
 		{
-			Name: "Withdraw_Success",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1, Balance: 100}, nil
+			name:  "Withdraw_Success",
+			login: "user1",
+			order: "order123",
+			sum:   50.0,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().UpdateUserBalance(1, -50.0).Return(nil)
 			},
-			MockAddWithdrawal: func() error {
-				return nil
-			},
-			MockUpdateBalance: func() error {
-				return nil
-			},
-			Sum:           50,
-			ExpectedError: nil,
+			expectedError: nil,
 		},
 		{
-			Name: "Withdraw_InsufficientFunds",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1, Balance: 10}, nil
+			name:  "Withdraw_Insufficient_Funds",
+			login: "user1",
+			order: "order123",
+			sum:   150.0,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
 			},
-			MockAddWithdrawal: func() error {
-				return nil
-			},
-			MockUpdateBalance: func() error {
-				return nil
-			},
-			Sum:           50,
-			ExpectedError: gofermartErrors.ErrInsufficientFunds,
+			expectedError: gofermartErrors.ErrInsufficientFunds,
 		},
 		{
-			Name: "Withdraw_NegativeAmount",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1, Balance: 100}, nil
+			name:  "Withdraw_Invalid_Amount",
+			login: "user1",
+			order: "order123",
+			sum:   -10.0,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
 			},
-			MockAddWithdrawal: func() error {
-				return nil
-			},
-			MockUpdateBalance: func() error {
-				return nil
-			},
-			Sum:           -10,
-			ExpectedError: gofermartErrors.ErrInvalidWithdrawalAmount,
+			expectedError: gofermartErrors.ErrInvalidWithdrawalAmount,
 		},
 		{
-			Name: "Withdraw_FailedToGetUser",
-			MockReturn: func() (*domain.User, error) {
-				return nil, errors.New("failed to get user")
+			name:  "Withdraw_Add_Withdrawal_Error",
+			login: "user1",
+			order: "order123",
+			sum:   50.0,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(errors.New("db error"))
 			},
-			MockAddWithdrawal: func() error {
-				return nil
-			},
-			MockUpdateBalance: func() error {
-				return nil
-			},
-			Sum:           50,
-			ExpectedError: errors.New("failed to get user"),
-		},
-		{
-			Name: "Withdraw_FailedToAddWithdrawal",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1, Balance: 100}, nil
-			},
-			MockAddWithdrawal: func() error {
-				return errors.New("failed to add withdrawal")
-			},
-			MockUpdateBalance: func() error {
-				return nil
-			},
-			Sum:           50,
-			ExpectedError: errors.New("failed to add withdrawal"),
-		},
-		{
-			Name: "Withdraw_FailedToUpdateBalance",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1, Balance: 100}, nil
-			},
-			MockAddWithdrawal: func() error {
-				return nil
-			},
-			MockUpdateBalance: func() error {
-				return errors.New("failed to update balance")
-			},
-			Sum:           50,
-			ExpectedError: errors.New("failed to update balance"),
+			expectedError: errors.New("db error"),
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			mockStore := &tests.MockStorage{
-				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					return tc.MockReturn()
-				},
-				AddWithdrawalFn: func(withdrawal domain.Withdrawal) error {
-					return tc.MockAddWithdrawal()
-				},
-				UpdateUserBalanceFn: func(userID int, amount float64) error {
-					return tc.MockUpdateBalance()
-				},
-			}
-			logger := zap.NewNop()
-			service := NewUserService(mockStore, logger)
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
 
-			err := service.Withdraw("test_user", "order123", tc.Sum)
+			err := userService.Withdraw(tc.login, tc.order, tc.sum)
 
-			if err != nil && tc.ExpectedError == nil {
+			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
-			} else if err == nil && tc.ExpectedError != nil {
+			} else if err == nil && tc.expectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && tc.ExpectedError != nil && err.Error() != tc.ExpectedError.Error() {
-				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
+			} else if err != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 		})
 	}
 }
 
-func TestGetWithdrawals(t *testing.T) {
+func TestUserService_GetWithdrawals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockWithdrawalRepo := mocks.NewMockWithdrawalRepository(ctrl)
+	logger := zap.NewNop()
+	userService := NewUserService(mockUserRepo, mockWithdrawalRepo, logger)
+
 	testCases := []struct {
-		Name            string
-		MockReturn      func() (*domain.User, error)
-		MockWithdrawals func() ([]domain.Withdrawal, error)
-		ExpectedError   error
-		Expected        []domain.Withdrawal
+		name           string
+		login          string
+		setupMocks     func()
+		expectedError  error
+		expectedResult []domain.Withdrawal
 	}{
 		{
-			Name: "GetWithdrawals_Success",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1}, nil
+			name:  "GetWithdrawals_Success",
+			login: "user1",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
+				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(1).Return([]domain.Withdrawal{
+					{OrderNumber: "order123", Amount: 50.0, ProcessedAt: time.Now()},
+				}, nil)
 			},
-			MockWithdrawals: func() ([]domain.Withdrawal, error) {
-				return []domain.Withdrawal{{OrderNumber: "order123", Amount: 50, ProcessedAt: time.Now()}}, nil
+			expectedError: nil,
+			expectedResult: []domain.Withdrawal{
+				{OrderNumber: "order123", Amount: 50.0},
 			},
-			ExpectedError: nil,
-			Expected:      []domain.Withdrawal{{OrderNumber: "order123", Amount: 50}},
 		},
 		{
-			Name: "GetWithdrawals_UserNotFound",
-			MockReturn: func() (*domain.User, error) {
-				return nil, gofermartErrors.ErrUserNotFound
+			name:  "GetWithdrawals_User_Not_Found",
+			login: "user1",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
 			},
-			MockWithdrawals: func() ([]domain.Withdrawal, error) {
-				return nil, nil
-			},
-			ExpectedError: gofermartErrors.ErrUserNotFound,
-			Expected:      nil,
+			expectedError:  gofermartErrors.ErrUserNotFound,
+			expectedResult: nil,
 		},
 		{
-			Name: "GetWithdrawals_FailedToGetUser",
-			MockReturn: func() (*domain.User, error) {
-				return nil, errors.New("failed to get user")
+			name:  "GetWithdrawals_Error",
+			login: "user1",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
+				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(1).Return(nil, errors.New("db error"))
 			},
-			MockWithdrawals: func() ([]domain.Withdrawal, error) {
-				return nil, nil
-			},
-			ExpectedError: errors.New("failed to get user"),
-			Expected:      nil,
-		},
-		{
-			Name: "GetWithdrawals_FailedToGetWithdrawals",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{UserID: 1}, nil
-			},
-			MockWithdrawals: func() ([]domain.Withdrawal, error) {
-				return nil, errors.New("failed to get withdrawals")
-			},
-			ExpectedError: errors.New("failed to get withdrawals"),
-			Expected:      nil,
+			expectedError:  errors.New("db error"),
+			expectedResult: nil,
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			mockStore := &tests.MockStorage{
-				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					return tc.MockReturn()
-				},
-				GetWithdrawalsByUserIDFn: func(userID int) ([]domain.Withdrawal, error) {
-					return tc.MockWithdrawals()
-				},
-			}
-			logger := zap.NewNop()
-			service := NewUserService(mockStore, logger)
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
 
-			withdrawals, err := service.GetWithdrawals("test_user")
+			result, err := userService.GetWithdrawals(tc.login)
 
-			if err != nil && tc.ExpectedError == nil {
+			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
-			} else if err == nil && tc.ExpectedError != nil {
+			} else if err == nil && tc.expectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && tc.ExpectedError != nil && err.Error() != tc.ExpectedError.Error() {
-				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
+			} else if err != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 
-			if len(withdrawals) != len(tc.Expected) {
-				t.Errorf("Expected %v withdrawals, got %v", len(tc.Expected), len(withdrawals))
+			if len(result) != len(tc.expectedResult) {
+				t.Errorf("Expected %d results, got %d", len(tc.expectedResult), len(result))
 			}
 		})
 	}

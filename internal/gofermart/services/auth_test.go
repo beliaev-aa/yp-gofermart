@@ -3,8 +3,9 @@ package services
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"testing"
@@ -12,11 +13,13 @@ import (
 
 func TestNewAuthService(t *testing.T) {
 	t.Run("NewAuthService_CreatesService", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockUserRepo := mocks.NewMockUserRepository(ctrl)
 		logger := zap.NewNop()
-		mockStorage := &tests.MockStorage{}
 		jwtSecret := []byte("secret")
 
-		authService := NewAuthService(jwtSecret, logger, mockStorage)
+		authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 
 		if authService == nil || authService.tokenAuth == nil {
 			t.Errorf("Expected AuthService to be initialized with JWTAuth")
@@ -24,168 +27,162 @@ func TestNewAuthService(t *testing.T) {
 		if authService.logger != logger {
 			t.Errorf("Expected AuthService to be initialized with provided logger")
 		}
-		if authService.storage != mockStorage {
+		if authService.userRepo != mockUserRepo {
 			t.Errorf("Expected AuthService to be initialized with provided storage")
 		}
 	})
 }
 
 func TestRegisterUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	logger := zap.NewNop()
+	jwtSecret := []byte("secret")
+
 	testCases := []struct {
-		Name          string
-		MockReturn    func() (*domain.User, error)
-		MockSave      func() error
-		ExpectedError error
-		Login         string
-		Password      string
+		name          string
+		setupMocks    func()
+		expectedError error
+		login         string
+		password      string
 	}{
 		{
-			Name: "RegisterUser_Success",
-			MockReturn: func() (*domain.User, error) {
-				return nil, nil
+			name: "RegisterUser_Success",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(nil, nil)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(nil)
 			},
-			MockSave: func() error {
-				return nil
-			},
-			ExpectedError: nil,
-			Login:         "new_user",
-			Password:      "password123",
+			expectedError: nil,
+			login:         "new_user",
+			password:      "password123",
 		},
 		{
-			Name: "RegisterUser_LoginAlreadyExists",
-			MockReturn: func() (*domain.User, error) {
-				return &domain.User{Login: "new_user"}, nil
+			name: "RegisterUser_LoginAlreadyExists",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{Login: "new_user"}, nil)
 			},
-			MockSave:      func() error { return nil },
-			ExpectedError: gofermartErrors.ErrLoginAlreadyExists,
-			Login:         "new_user",
-			Password:      "password123",
+			expectedError: gofermartErrors.ErrLoginAlreadyExists,
+			login:         "new_user",
+			password:      "password123",
 		},
 		{
-			Name: "RegisterUser_SaveUserError",
-			MockReturn: func() (*domain.User, error) {
-				return nil, nil
+			name: "RegisterUser_SaveUserError",
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(nil, nil)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(errors.New("failed to save user"))
 			},
-			MockSave: func() error {
-				return errors.New("failed to save user")
-			},
-			ExpectedError: errors.New("failed to save user"),
-			Login:         "new_user",
-			Password:      "password123",
+			expectedError: errors.New("failed to save user"),
+			login:         "new_user",
+			password:      "password123",
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			mockStore := &tests.MockStorage{
-				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					return tc.MockReturn()
-				},
-				SaveUserFn: func(user domain.User) error {
-					return tc.MockSave()
-				},
-			}
-			logger := zap.NewNop()
-			authService := NewAuthService([]byte("secret"), logger, mockStore)
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupMocks()
 
-			err := authService.RegisterUser(tc.Login, tc.Password)
+			authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 
-			if err != nil && tc.ExpectedError == nil {
+			err := authService.RegisterUser(tc.login, tc.password)
+
+			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
-			} else if err == nil && tc.ExpectedError != nil {
+			} else if err == nil && tc.expectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && err.Error() != tc.ExpectedError.Error() {
-				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
+			} else if err != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 		})
 	}
 }
 
 func TestAuthenticateUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	logger := zap.NewNop()
+	jwtSecret := []byte("secret")
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 
 	testCases := []struct {
-		Name          string
-		MockReturn    func() (*domain.User, error)
-		Login         string
-		Password      string
-		ExpectedAuth  bool
-		ExpectedError error
+		name          string
+		mockReturn    func(login string) (*domain.User, error)
+		login         string
+		password      string
+		expectedAuth  bool
+		expectedError error
 	}{
 		{
-			Name: "AuthenticateUser_Success",
-			MockReturn: func() (*domain.User, error) {
+			name: "AuthenticateUser_Success",
+			mockReturn: func(login string) (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: string(hashedPassword)}, nil
 			},
-			Login:         "test_user",
-			Password:      "password123",
-			ExpectedAuth:  true,
-			ExpectedError: nil,
+			login:         "test_user",
+			password:      "password123",
+			expectedAuth:  true,
+			expectedError: nil,
 		},
 		{
-			Name: "AuthenticateUser_UserNotFound",
-			MockReturn: func() (*domain.User, error) {
+			name: "AuthenticateUser_UserNotFound",
+			mockReturn: func(login string) (*domain.User, error) {
 				return nil, gofermartErrors.ErrUserNotFound
 			},
-			Login:         "test_user",
-			Password:      "password123",
-			ExpectedAuth:  false,
-			ExpectedError: nil,
+			login:         "test_user",
+			password:      "password123",
+			expectedAuth:  false,
+			expectedError: nil,
 		},
 		{
-			Name: "AuthenticateUser_LoginNotFound",
-			MockReturn: func() (*domain.User, error) {
+			name: "AuthenticateUser_LoginNotFound",
+			mockReturn: func(login string) (*domain.User, error) {
 				return nil, nil
 			},
-			Login:         "test_user",
-			Password:      "password123",
-			ExpectedAuth:  false,
-			ExpectedError: nil,
+			login:         "test_user",
+			password:      "password123",
+			expectedAuth:  false,
+			expectedError: nil,
 		},
 		{
-			Name: "AuthenticateUser_InvalidPassword",
-			MockReturn: func() (*domain.User, error) {
+			name: "AuthenticateUser_InvalidPassword",
+			mockReturn: func(login string) (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: string(hashedPassword)}, nil
 			},
-			Login:         "test_user",
-			Password:      "wrong_password",
-			ExpectedAuth:  false,
-			ExpectedError: nil,
+			login:         "test_user",
+			password:      "wrong_password",
+			expectedAuth:  false,
+			expectedError: nil,
 		},
 		{
-			Name: "AuthenticateUser_GetUserError",
-			MockReturn: func() (*domain.User, error) {
+			name: "AuthenticateUser_GetUserError",
+			mockReturn: func(login string) (*domain.User, error) {
 				return nil, errors.New("db error")
 			},
-			Login:         "test_user",
-			Password:      "password123",
-			ExpectedAuth:  false,
-			ExpectedError: errors.New("db error"),
+			login:         "test_user",
+			password:      "password123",
+			expectedAuth:  false,
+			expectedError: errors.New("db error"),
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			mockStore := &tests.MockStorage{
-				GetUserByLoginFn: func(login string) (*domain.User, error) {
-					return tc.MockReturn()
-				},
-			}
-			logger := zap.NewNop()
-			authService := NewAuthService([]byte("secret"), logger, mockStore)
+		t.Run(tc.name, func(t *testing.T) {
+			mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).DoAndReturn(tc.mockReturn)
 
-			authenticated, err := authService.AuthenticateUser(tc.Login, tc.Password)
+			authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 
-			if authenticated != tc.ExpectedAuth {
-				t.Errorf("Expected authenticated %v, got %v", tc.ExpectedAuth, authenticated)
+			authenticated, err := authService.AuthenticateUser(tc.login, tc.password)
+
+			if authenticated != tc.expectedAuth {
+				t.Errorf("Expected authenticated %v, got %v", tc.expectedAuth, authenticated)
 			}
 
-			if err != nil && tc.ExpectedError == nil {
+			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)
-			} else if err == nil && tc.ExpectedError != nil {
+			} else if err == nil && tc.expectedError != nil {
 				t.Errorf("Expected error, got none")
-			} else if err != nil && err.Error() != tc.ExpectedError.Error() {
-				t.Errorf("Expected error %v, got %v", tc.ExpectedError, err)
+			} else if err != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 		})
 	}
@@ -193,9 +190,13 @@ func TestAuthenticateUser(t *testing.T) {
 
 func TestGenerateJWT(t *testing.T) {
 	t.Run("GenerateJWT_Success", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockUserRepo := mocks.NewMockUserRepository(ctrl)
 		logger := zap.NewNop()
-		mockStorage := &tests.MockStorage{}
-		authService := NewAuthService([]byte("secret"), logger, mockStorage)
+		jwtSecret := []byte("secret")
+
+		authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 
 		token, err := authService.GenerateJWT("test_user")
 
@@ -211,9 +212,13 @@ func TestGenerateJWT(t *testing.T) {
 
 func TestGetTokenAuth(t *testing.T) {
 	t.Run("GetTokenAuth_Success", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockUserRepo := mocks.NewMockUserRepository(ctrl)
 		logger := zap.NewNop()
-		mockStorage := &tests.MockStorage{}
-		authService := NewAuthService([]byte("secret"), logger, mockStorage)
+		jwtSecret := []byte("secret")
+
+		authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 
 		tokenAuth := authService.GetTokenAuth()
 

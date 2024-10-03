@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
@@ -15,13 +14,14 @@ import (
 
 func TestRegisterRoutes(t *testing.T) {
 	logger := zap.NewNop()
-	storageMock := &tests.MockStorage{}
 	ctrl := gomock.NewController(t)
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockWithdrawalRepo := mocks.NewMockWithdrawalRepository(ctrl)
 	defer ctrl.Finish()
 
 	appServices := &services.AppServices{
-		UserService:  services.NewUserService(storageMock, logger),
-		AuthService:  services.NewAuthService([]byte("secret"), logger, storageMock),
+		UserService:  services.NewUserService(mockUserRepo, mockWithdrawalRepo, logger),
+		AuthService:  services.NewAuthService([]byte("secret"), mockUserRepo, logger),
 		OrderService: mocks.NewMockOrderServiceInterface(ctrl),
 	}
 

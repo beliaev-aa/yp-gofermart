@@ -4,9 +4,10 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"bytes"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -14,79 +15,83 @@ import (
 )
 
 func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
 	logger := zap.NewNop()
-
-	mockStorage := &tests.MockStorage{
-		SaveUserFn: func(user domain.User) error {
-			if user.Login == "existing_user" {
-				return gofermartErrors.ErrLoginAlreadyExists
-			} else if user.Login == "server_error" {
-				return errors.New("user not found")
-			}
-			return nil
-		},
-		GetUserByLoginFn: func(login string) (*domain.User, error) {
-			if login == "existing_user" {
-				return &domain.User{Login: login}, nil
-			}
-			return nil, nil
-		},
-	}
-
-	authService := services.NewAuthService([]byte("secret"), logger, mockStorage)
-
+	jwtSecret := []byte("secret")
+	authService := services.NewAuthService(jwtSecret, mockUserRepo, logger)
 	handler := NewRegisterPostHandler(authService, logger)
 
 	testCases := []struct {
-		name               string
-		requestBody        string
-		expectedStatusCode int
+		Name                 string
+		RequestBody          string
+		SetupMocks           func()
+		ExpectedStatusCode   int
+		ExpectedResponseBody string
+		ExpectedAuthHeader   string
 	}{
 		{
-			name: "Success_Response",
-			requestBody: `{
-				"login": "new_user",
-				"password": "password123"
-			}`,
-			expectedStatusCode: http.StatusOK,
+			Name:                 "Invalid_Request_Format",
+			RequestBody:          `{invalid json}`,
+			SetupMocks:           func() {},
+			ExpectedStatusCode:   http.StatusBadRequest,
+			ExpectedResponseBody: "Invalid request format\n",
 		},
 		{
-			name: "Login_Already_Exists",
-			requestBody: `{
-				"login": "existing_user",
-				"password": "password123"
-			}`,
-			expectedStatusCode: http.StatusConflict,
+			Name:        "Registration_Conflict",
+			RequestBody: `{"login": "user1", "password": "password123"}`,
+			SetupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{Login: "user1"}, nil)
+			},
+			ExpectedStatusCode:   http.StatusConflict,
+			ExpectedResponseBody: "login already exist\n",
 		},
 		{
-			name: "Server_Error",
-			requestBody: `{
-				"login": "server_error",
-				"password": "password123"
-			}`,
-			expectedStatusCode: http.StatusInternalServerError,
+			Name:        "Registration_Server_Error",
+			RequestBody: `{"login": "user1", "password": "password123"}`,
+			SetupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(errors.New("db error")) // Добавлено ожидание вызова SaveUser
+			},
+			ExpectedStatusCode:   http.StatusInternalServerError,
+			ExpectedResponseBody: "Server error\n",
 		},
 		{
-			name:               "Invalid_Request_Format",
-			requestBody:        `{invalid json}`,
-			expectedStatusCode: http.StatusBadRequest,
+			Name:        "Successful_Registration",
+			RequestBody: `{"login": "user1", "password": "password123"}`,
+			SetupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(nil)
+			},
+			ExpectedStatusCode: http.StatusOK,
+			ExpectedAuthHeader: "Bearer ",
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte(tc.requestBody)))
+		t.Run(tc.Name, func(t *testing.T) {
+			tc.SetupMocks()
 
-			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewBufferString(tc.RequestBody))
+			rec := httptest.NewRecorder()
 
-			handler.ServeHTTP(rr, req)
+			handler.ServeHTTP(rec, req)
 
-			if rr.Code != tc.expectedStatusCode {
-				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
+			if rec.Code != tc.ExpectedStatusCode {
+				t.Errorf("Expected status code %d, got %d", tc.ExpectedStatusCode, rec.Code)
 			}
 
-			if tc.name == "Invalid_Request_Format" && rr.Body.String() != "Invalid request format\n" {
-				t.Errorf("expected error message 'Invalid request format', got %v", rr.Body.String())
+			if rec.Body.String() != tc.ExpectedResponseBody {
+				t.Errorf("Expected response body '%s', got '%s'", tc.ExpectedResponseBody, rec.Body.String())
+			}
+
+			if tc.ExpectedStatusCode == http.StatusOK {
+				authHeader := rec.Header().Get("Authorization")
+				if !bytes.HasPrefix([]byte(authHeader), []byte(tc.ExpectedAuthHeader)) {
+					t.Errorf("Expected Authorization header to start with '%s', got '%s'", tc.ExpectedAuthHeader, authHeader)
+				}
 			}
 		})
 	}

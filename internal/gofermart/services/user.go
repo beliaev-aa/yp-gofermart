@@ -11,22 +11,24 @@ import (
 
 // UserService - отвечает за операции с пользователями, включая получение баланса и вывод средств
 type UserService struct {
-	storage storage.Storage
-	logger  *zap.Logger
+	logger         *zap.Logger
+	userRepo       storage.UserRepository
+	withdrawalRepo storage.WithdrawalRepository
 }
 
 // NewUserService - создает новый экземпляр UserService
-func NewUserService(storage storage.Storage, logger *zap.Logger) *UserService {
+func NewUserService(userRepo storage.UserRepository, withdrawalRepo storage.WithdrawalRepository, logger *zap.Logger) *UserService {
 	return &UserService{
-		storage: storage,
-		logger:  logger,
+		logger:         logger,
+		userRepo:       userRepo,
+		withdrawalRepo: withdrawalRepo,
 	}
 }
 
 // GetBalance возвращает текущий баланс пользователя по его логину
 func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 	// Получаем баланс пользователя и сумму снятых средств из хранилища
-	userBalance, err := s.storage.GetUserBalance(login)
+	userBalance, err := s.userRepo.GetUserBalance(login)
 	if err != nil {
 		s.logger.Error("Failed to get user balance", zap.Error(err))
 		return nil, err
@@ -38,7 +40,7 @@ func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 // Withdraw обрабатывает запрос на вывод средств для указанного пользователя и заказа
 func (s *UserService) Withdraw(login, order string, sum float64) error {
 	// Получаем информацию о пользователе по логину
-	user, err := s.storage.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(login)
 	if err != nil {
 		s.logger.Error("Failed to get user", zap.Error(err))
 		return err
@@ -63,14 +65,14 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 	}
 
 	// Добавляем информацию о выводе в хранилище
-	err = s.storage.AddWithdrawal(withdrawal)
+	err = s.withdrawalRepo.AddWithdrawal(withdrawal)
 	if err != nil {
 		s.logger.Error("Failed to add withdrawal", zap.Error(err))
 		return err
 	}
 
 	// Обновляем баланс пользователя в хранилище
-	err = s.storage.UpdateUserBalance(user.UserID, -sum) // Уменьшаем баланс
+	err = s.userRepo.UpdateUserBalance(user.UserID, -sum) // Уменьшаем баланс
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
 		return err
@@ -82,7 +84,7 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 // GetWithdrawals возвращает список всех выводов средств пользователя по его логину
 func (s *UserService) GetWithdrawals(login string) ([]domain.Withdrawal, error) {
 	// Получаем информацию о пользователе по логину
-	user, err := s.storage.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(login)
 	if err != nil {
 		// Проверяем, если пользователь не найден, возвращаем соответствующую ошибку
 		if errors.Is(err, gofermartErrors.ErrUserNotFound) {
@@ -94,7 +96,7 @@ func (s *UserService) GetWithdrawals(login string) ([]domain.Withdrawal, error) 
 	}
 
 	// Получаем список всех выводов средств пользователя
-	withdrawals, err := s.storage.GetWithdrawalsByUserID(user.UserID)
+	withdrawals, err := s.withdrawalRepo.GetWithdrawalsByUserID(user.UserID)
 	if err != nil {
 		s.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err

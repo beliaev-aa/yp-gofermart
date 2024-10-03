@@ -43,13 +43,13 @@ func main() {
 	accrualService := services.NewAccrualService(cfg.AccrualSystemAddress, logger)
 
 	// Инициализация сервиса для работы с заказами
-	orderService := services.NewOrderService(accrualService, store, logger)
+	orderService := services.NewOrderService(accrualService, store.OrderRepo, store.UserRepo, logger)
 
 	// Создание сервисов приложения
 	appServices := &services.AppServices{
-		AuthService:  services.NewAuthService([]byte(cfg.JWTSecret), logger, store),
+		AuthService:  services.NewAuthService([]byte(cfg.JWTSecret), store.UserRepo, logger),
 		OrderService: orderService,
-		UserService:  services.NewUserService(store, logger),
+		UserService:  services.NewUserService(store.UserRepo, store.WithdrawalRepo, logger),
 	}
 
 	// Инициализация роутера Chi

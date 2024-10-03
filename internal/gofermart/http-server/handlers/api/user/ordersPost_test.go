@@ -1,10 +1,7 @@
 package user
 
 import (
-	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
-	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
 	"github.com/golang/mock/gomock"
@@ -18,154 +15,104 @@ import (
 func TestOrdersPostHandler_ServeHTTP(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	logger := zap.NewNop()
-
 	validOrderNumber := "79927398713"
-	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
+	mockOrderService := mocks.NewMockOrderServiceInterface(ctrl)
+	mockUsernameExtractor := mocks.NewMockUsernameExtractor(ctrl)
+
+	logger := zap.NewNop()
+	handler := NewOrdersPostHandler(mockOrderService, mockUsernameExtractor, logger)
 
 	testCases := []struct {
-		name               string
-		login              string
-		body               string
-		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
-		mockSetup          func(m *tests.MockStorage)
-		expectedStatusCode int
-		expectedBody       string
+		name                 string
+		requestBody          string
+		setupMocks           func()
+		expectedStatusCode   int
+		expectedResponseBody string
 	}{
 		{
-			name: "Unauthorized_Access",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "", http.ErrNoCookie
+			name:        "ExtractUsername_Error",
+			requestBody: "123456",
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("", errors.New("extraction error"))
 			},
-			body:               validOrderNumber,
-			expectedStatusCode: http.StatusInternalServerError,
-			expectedBody:       "Internal Server Error\n",
+			expectedStatusCode:   http.StatusInternalServerError,
+			expectedResponseBody: "Internal Server Error\n",
 		},
 		{
-			name: "Invalid_Request_Body",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Invalid_Request_Body",
+			requestBody: "",
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
 			},
-			body:               "",
-			expectedStatusCode: http.StatusBadRequest,
-			expectedBody:       "Invalid request format\n",
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedResponseBody: "Invalid request format\n",
 		},
 		{
-			name: "Invalid_Order_Number_Format",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Invalid_Order_Number_Format",
+			requestBody: "invalid_order",
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
 			},
-			body:               "123456",
-			expectedStatusCode: http.StatusUnprocessableEntity,
-			expectedBody:       "Invalid order number format\n",
+			expectedStatusCode:   http.StatusUnprocessableEntity,
+			expectedResponseBody: "Invalid order number format\n",
 		},
 		{
-			name: "Order_Already_Uploaded_By_User",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Order_Already_Uploaded",
+			requestBody: validOrderNumber,
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
+				mockOrderService.EXPECT().AddOrder("user", validOrderNumber).Return(gofermartErrors.ErrOrderAlreadyUploaded)
 			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.AddOrderFn = func(order domain.Order) error {
-					return gofermartErrors.ErrOrderAlreadyUploaded
-				}
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
-				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
-					return &domain.Order{UserID: 2, OrderNumber: validOrderNumber}, nil
-				}
-			},
-			body:               validOrderNumber,
-			expectedStatusCode: http.StatusConflict,
-			expectedBody:       "Order number already uploaded by another user\n",
+			expectedStatusCode:   http.StatusOK,
+			expectedResponseBody: "",
 		},
 		{
-			name: "Internal_Server_Error_On_Add_Order",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Order_Uploaded_By_Another",
+			requestBody: validOrderNumber,
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
+				mockOrderService.EXPECT().AddOrder("user", validOrderNumber).Return(gofermartErrors.ErrOrderUploadedByAnother)
 			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.AddOrderFn = func(order domain.Order) error {
-					return errors.New("failed to add order")
-				}
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
-				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
-					return nil, errors.New("failed to add order")
-				}
-			},
-			body:               validOrderNumber,
-			expectedStatusCode: http.StatusInternalServerError,
-			expectedBody:       "Internal Server Error\n",
+			expectedStatusCode:   http.StatusConflict,
+			expectedResponseBody: "Order number already uploaded by another user\n",
 		},
 		{
-			name: "Order_Accepted",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Internal_Service_Error",
+			requestBody: validOrderNumber,
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
+				mockOrderService.EXPECT().AddOrder("user", validOrderNumber).Return(errors.New("internal error"))
 			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.AddOrderFn = func(order domain.Order) error {
-					return nil
-				}
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
-				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
-					return nil, gofermartErrors.ErrOrderNotFound
-				}
-			},
-			body:               validOrderNumber,
-			expectedStatusCode: http.StatusAccepted,
-			expectedBody:       "",
+			expectedStatusCode:   http.StatusInternalServerError,
+			expectedResponseBody: "Internal Server Error\n",
 		},
 		{
-			name: "Order_Already_Uploaded_By_Same_User",
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			name:        "Successful_Order_Addition",
+			requestBody: validOrderNumber,
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
+				mockOrderService.EXPECT().AddOrder("user", validOrderNumber).Return(nil)
 			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.AddOrderFn = func(order domain.Order) error {
-					return gofermartErrors.ErrOrderAlreadyUploaded
-				}
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
-				m.GetOrderByNumberFn = func(number string) (*domain.Order, error) {
-					return &domain.Order{UserID: 1, OrderNumber: validOrderNumber}, nil
-				}
-			},
-			body:               validOrderNumber,
-			expectedStatusCode: http.StatusOK,
-			expectedBody:       "",
+			expectedStatusCode:   http.StatusAccepted,
+			expectedResponseBody: "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
+			tc.setupMocks()
 
-			mockStorage := &tests.MockStorage{}
-			if tc.mockSetup != nil {
-				tc.mockSetup(mockStorage)
+			req := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(tc.requestBody))
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tc.expectedStatusCode {
+				t.Errorf("Expected status code %d, got %d", tc.expectedStatusCode, rec.Code)
 			}
 
-			orderService := services.NewOrderService(nil, mockStorage, logger)
-
-			handler := NewOrdersPostHandler(orderService, mockExtractor, logger)
-
-			req := httptest.NewRequest("POST", "/orders", strings.NewReader(tc.body))
-
-			rr := httptest.NewRecorder()
-
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != tc.expectedStatusCode {
-				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
-			}
-
-			if rr.Body.String() != tc.expectedBody {
-				t.Errorf("expected body %q, got %q", tc.expectedBody, rr.Body.String())
+			if rec.Body.String() != tc.expectedResponseBody {
+				t.Errorf("Expected response body '%s', got '%s'", tc.expectedResponseBody, rec.Body.String())
 			}
 		})
 	}

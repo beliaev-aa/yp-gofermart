@@ -3,79 +3,80 @@ package user
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
+	"beliaev-aa/yp-gofermart/tests/mocks"
 	"bytes"
 	"errors"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
 func TestLoginPostHandler_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
 	logger := zap.NewNop()
+	jwtSecret := []byte("secret")
+	authService := services.NewAuthService(jwtSecret, mockUserRepo, logger)
+	handler := NewLoginPostHandler(authService, logger)
 
 	testCases := []struct {
-		name               string
-		requestBody        string
-		mockGetUserByLogin func(login string) (*domain.User, error)
-		mockGenerateJWT    func(login string) (string, error)
-		expectedStatusCode int
+		name                 string
+		requestBody          string
+		setupMocks           func()
+		expectedStatusCode   int
+		expectedResponseBody string
+		expectedAuthHeader   string
 	}{
 		{
-			name: "Authentication_Failed",
-			requestBody: `{
-				"login": "test_user",
-				"password": "wrong_password"
-			}`,
-			mockGetUserByLogin: func(login string) (*domain.User, error) {
-				return &domain.User{Login: "test_user", Password: "password123"}, nil
-			},
-			expectedStatusCode: http.StatusUnauthorized,
+			name:                 "Invalid_Request_Format",
+			requestBody:          `{invalid json}`,
+			setupMocks:           func() {},
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedResponseBody: "Invalid request format\n",
 		},
 		{
-			name: "Server_Error_During_Authentication",
-			requestBody: `{
-				"login": "test_user",
-				"password": "password123"
-			}`,
-			mockGetUserByLogin: func(login string) (*domain.User, error) {
-				return nil, errors.New("internal error")
+			name:        "Authentication_Error",
+			requestBody: `{"login": "user1", "password": "wrong_password"}`,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, errors.New("db error"))
 			},
-			expectedStatusCode: http.StatusInternalServerError,
+			expectedStatusCode:   http.StatusInternalServerError,
+			expectedResponseBody: "Server error\n",
 		},
 		{
-			name:               "Invalid_Request_Format",
-			requestBody:        `{invalid json}`,
-			expectedStatusCode: http.StatusBadRequest,
+			name:        "Invalid_Login_Or_Password",
+			requestBody: `{"login": "user1", "password": "wrong_password"}`,
+			setupMocks: func() {
+				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{Login: "user1", Password: "hashed_password"}, nil)
+			},
+			expectedStatusCode:   http.StatusUnauthorized,
+			expectedResponseBody: "Invalid login/password\n",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockStorage := &tests.MockStorage{
-				GetUserByLoginFn: tc.mockGetUserByLogin,
+			tc.setupMocks()
+			req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBufferString(tc.requestBody))
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.expectedStatusCode {
+				t.Errorf("Expected status code %d, got %d", tc.expectedStatusCode, rec.Code)
 			}
 
-			authService := services.NewAuthService([]byte("secret"), logger, mockStorage)
-
-			handler := NewLoginPostHandler(authService, logger)
-
-			req := httptest.NewRequest("POST", "/login", bytes.NewReader([]byte(tc.requestBody)))
-
-			rr := httptest.NewRecorder()
-
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != tc.expectedStatusCode {
-				t.Errorf("expected status %v, got %v", tc.expectedStatusCode, rr.Code)
+			if rec.Body.String() != tc.expectedResponseBody {
+				t.Errorf("Expected response body '%s', got '%s'", tc.expectedResponseBody, rec.Body.String())
 			}
 
 			if tc.expectedStatusCode == http.StatusOK {
-				authHeader := rr.Header().Get("Authorization")
-				if !strings.HasPrefix(authHeader, "Bearer ") {
-					t.Errorf("expected Authorization header to start with 'Bearer ', got %v", authHeader)
+				authHeader := rec.Header().Get("Authorization")
+				if !bytes.HasPrefix([]byte(authHeader), []byte(tc.expectedAuthHeader)) {
+					t.Errorf("Expected Authorization header to start with '%s', got '%s'", tc.expectedAuthHeader, authHeader)
 				}
 			}
 		})

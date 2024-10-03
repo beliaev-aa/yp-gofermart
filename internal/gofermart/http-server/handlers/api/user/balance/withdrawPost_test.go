@@ -3,7 +3,6 @@ package balance
 import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	"beliaev-aa/yp-gofermart/internal/gofermart/services"
-	"beliaev-aa/yp-gofermart/tests"
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"bytes"
 	"errors"
@@ -17,14 +16,16 @@ import (
 func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockExtractor := mocks.NewMockUsernameExtractor(ctrl)
+	mockUsernameExtractor := mocks.NewMockUsernameExtractor(ctrl)
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockWithdrawalRepo := mocks.NewMockWithdrawalRepository(ctrl)
+
 	logger := zap.NewNop()
 
 	type testCase struct {
 		name               string
 		requestBody        string
-		mockExtractFn      func(r *http.Request, logger *zap.Logger) (string, error)
-		mockSetup          func(m *tests.MockStorage)
+		setupMocks         func()
 		expectedStatusCode int
 		expectedResponse   string
 	}
@@ -32,9 +33,9 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 	testCases := []testCase{
 		{
 			name:        "Malformed_JSON_Body",
-			requestBody: `{"Order": "12345678903", "Sum": "invalid_number"}`, // Invalid JSON: Sum should be a float
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			requestBody: `{"Order": "12345678903", "Sum": "invalid_number"}`,
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
 			},
 			expectedStatusCode: http.StatusBadRequest,
 			expectedResponse:   "Invalid request format\n",
@@ -42,8 +43,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Unauthorized_Access",
 			requestBody: `{"Order": "12345678903", "Sum": 100.50}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "", http.ErrNoCookie
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("", http.ErrNoCookie)
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   "Internal Server Error\n",
@@ -51,13 +52,9 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Invalid_Request_Format",
 			requestBody: `{"Order": "", "Sum": 0.0}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   "Internal Server Error\n",
@@ -65,8 +62,8 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Invalid_Order_Number_Format",
 			requestBody: `{"Order": "123456", "Sum": 100.50}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
 			},
 			expectedStatusCode: http.StatusUnprocessableEntity,
 			expectedResponse:   "Invalid order number format\n",
@@ -74,13 +71,9 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Insufficient_Funds",
 			requestBody: `{"Order": "79927398713", "Sum": 150.00}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1}, nil
-				}
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
 			},
 			expectedStatusCode: http.StatusPaymentRequired,
 			expectedResponse:   "Insufficient funds\n",
@@ -88,19 +81,11 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Successful_Withdrawal",
 			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1, Balance: 400}, nil
-				}
-				m.AddWithdrawalFn = func(withdrawal domain.Withdrawal) error {
-					return nil
-				}
-				m.UpdateUserBalanceFn = func(userID int, amount float64) error {
-					return nil
-				}
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1, Balance: 400}, nil)
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse:   "",
@@ -108,16 +93,10 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 		{
 			name:        "Internal_Server_Error_On_Withdraw",
 			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
-			mockExtractFn: func(r *http.Request, logger *zap.Logger) (string, error) {
-				return "test_user", nil
-			},
-			mockSetup: func(m *tests.MockStorage) {
-				m.GetUserByLoginFn = func(login string) (*domain.User, error) {
-					return &domain.User{UserID: 1, Balance: 400}, nil
-				}
-				m.AddWithdrawalFn = func(withdrawal domain.Withdrawal) error {
-					return errors.New("internal Server Error")
-				}
+			setupMocks: func() {
+				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1, Balance: 400}, nil)
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(errors.New("internal Server Error"))
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   "Internal Server Error\n",
@@ -126,16 +105,11 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockExtractFn)
+			tc.setupMocks()
 
-			mockStorage := &tests.MockStorage{}
-			if tc.mockSetup != nil {
-				tc.mockSetup(mockStorage)
-			}
+			userService := services.NewUserService(mockUserRepo, mockWithdrawalRepo, logger)
 
-			userService := services.NewUserService(mockStorage, logger)
-
-			handler := NewWithdrawPostHandler(userService, mockExtractor, logger)
+			handler := NewWithdrawPostHandler(userService, mockUsernameExtractor, logger)
 
 			req := httptest.NewRequest("POST", "/withdraw", bytes.NewBufferString(tc.requestBody))
 

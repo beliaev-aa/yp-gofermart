@@ -22,28 +22,30 @@ type OrderServiceInterface interface {
 type OrderService struct {
 	accrualClient AccrualService
 	logger        *zap.Logger
-	storage       storage.Storage
+	orderRepo     storage.OrderRepository
+	userRepo      storage.UserRepository
 }
 
 // NewOrderService - создает новый экземпляр OrderService.
-func NewOrderService(accrualClient AccrualService, storage storage.Storage, logger *zap.Logger) *OrderService {
+func NewOrderService(accrualClient AccrualService, orderRepo storage.OrderRepository, userRepo storage.UserRepository, logger *zap.Logger) *OrderService {
 	return &OrderService{
 		accrualClient: accrualClient,
 		logger:        logger,
-		storage:       storage,
+		orderRepo:     orderRepo,
+		userRepo:      userRepo,
 	}
 }
 
 // AddOrder - добавляет новый заказ, проверяя, не был ли он уже добавлен другим пользователем.
 func (s *OrderService) AddOrder(login, number string) error {
 	// Получаем пользователя по логину
-	user, err := s.storage.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(login)
 	if err != nil {
 		return err
 	}
 
 	// Проверяем, был ли уже добавлен заказ с таким номером
-	existingOrder, err := s.storage.GetOrderByNumber(number)
+	existingOrder, err := s.orderRepo.GetOrderByNumber(number)
 	if err != nil && !errors.Is(err, gofermartErrors.ErrOrderNotFound) {
 		return err
 	}
@@ -65,7 +67,7 @@ func (s *OrderService) AddOrder(login, number string) error {
 		UploadedAt:  time.Now(),
 	}
 
-	err = s.storage.AddOrder(order)
+	err = s.orderRepo.AddOrder(order)
 	if err != nil {
 		return err
 	}
@@ -75,12 +77,12 @@ func (s *OrderService) AddOrder(login, number string) error {
 
 // GetOrders - возвращает список заказов пользователя.
 func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
-	user, err := s.storage.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(login)
 	if err != nil {
 		return nil, err
 	}
 
-	orders, err := s.storage.GetOrdersByUserID(user.UserID)
+	orders, err := s.orderRepo.GetOrdersByUserID(user.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +95,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 	s.logger.Info("Starting order status update")
 
 	// Получаем заказы, которые не обрабатываются (processing = FALSE)
-	orders, err := s.storage.GetOrdersForProcessing()
+	orders, err := s.orderRepo.GetOrdersForProcessing()
 	if err != nil {
 		s.logger.Error("Failed to fetch orders for status update", zap.Error(err))
 		return
@@ -101,7 +103,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 
 	for _, order := range orders {
 		// Блокируем заказ для обработки, устанавливаем processing = TRUE
-		err := s.storage.LockOrderForProcessing(order.OrderNumber)
+		err := s.orderRepo.LockOrderForProcessing(order.OrderNumber)
 		if err != nil {
 			s.logger.Error("Failed to lock order for processing", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
@@ -111,7 +113,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 		s.processOrder(ctx, order)
 
 		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
-		err = s.storage.UnlockOrder(order.OrderNumber)
+		err = s.orderRepo.UnlockOrder(order.OrderNumber)
 		if err != nil {
 			s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
@@ -130,7 +132,7 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
 	order.OrderStatus = status
 	order.Accrual = accrual
 
-	err = s.storage.UpdateOrder(order)
+	err = s.orderRepo.UpdateOrder(order)
 	if err != nil {
 		s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
 		return
@@ -147,7 +149,7 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
 
 // UpdateUserBalance - обновляет баланс пользователя.
 func (s *OrderService) UpdateUserBalance(userID int, amount float64) error {
-	err := s.storage.UpdateUserBalance(userID, amount)
+	err := s.userRepo.UpdateUserBalance(userID, amount)
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Int("userID", userID), zap.Error(err))
 		return err
