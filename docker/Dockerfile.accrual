@@ -1,0 +1,10 @@
+# Dockerfile for accrual service
+FROM debian:bullseye-slim
+
+WORKDIR /app
+
+COPY ./accrual ./accrual
+
+RUN chmod +x ./accrual
+
+CMD ["./accrual", "-a", ":8080", "-d", "postgresql://user:password@db:5432/accrual_db"]
