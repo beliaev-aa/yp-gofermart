@@ -48,12 +48,12 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 
 	// Проверка на отрицательную сумму при выводе средств
 	if sum <= 0 {
-		return gofermartErrors.ErrInvalidWithdrawalAmount // Ошибка при попытке вывести недопустимую сумму
+		return gofermartErrors.ErrInvalidWithdrawalAmount
 	}
 
 	// Проверяем, достаточно ли средств для вывода
 	if user.Balance < sum {
-		return gofermartErrors.ErrInsufficientFunds // Ошибка недостатка средств
+		return gofermartErrors.ErrInsufficientFunds
 	}
 
 	// Создаем запись о выводе средств
@@ -61,46 +61,40 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 		OrderNumber: order,
 		UserID:      user.UserID,
 		Amount:      sum,
-		ProcessedAt: time.Now(), // Время обработки вывода
+		ProcessedAt: time.Now(),
 	}
 
 	tx, err := s.userRepo.BeginTransaction()
 	if err != nil {
+		s.logger.Error("Failed to begin transaction", zap.Error(err))
 		return err
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			err := s.userRepo.Rollback(tx)
-			if err != nil {
-				s.logger.Error("Failed to rollback", zap.Error(err))
-				return
-			}
-			panic(p)
-		} else if err != nil {
-			err := s.userRepo.Rollback(tx)
-			if err != nil {
-				s.logger.Error("Failed to rollback", zap.Error(err))
-				return
-			}
-		} else {
-			err = s.userRepo.Commit(tx)
-			if err != nil {
-				s.logger.Error("Failed to commit transaction", zap.Error(err))
-			}
-		}
-	}()
 
 	// Добавляем информацию о выводе в хранилище
 	err = s.withdrawalRepo.AddWithdrawal(tx, withdrawal)
 	if err != nil {
 		s.logger.Error("Failed to add withdrawal", zap.Error(err))
+		if rbErr := s.userRepo.Rollback(tx); rbErr != nil {
+			s.logger.Error("Failed to rollback transaction", zap.Error(rbErr))
+		}
 		return err
 	}
 
-	// Обновляем баланс пользователя в хранилище
-	err = s.userRepo.UpdateUserBalance(tx, user.UserID, -sum) // Уменьшаем баланс
+	err = s.userRepo.UpdateUserBalance(tx, user.UserID, -sum)
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
+		if rbErr := s.userRepo.Rollback(tx); rbErr != nil {
+			s.logger.Error("Failed to rollback transaction", zap.Error(rbErr))
+		}
+		return err
+	}
+
+	err = s.userRepo.Commit(tx)
+	if err != nil {
+		s.logger.Error("Failed to commit transaction", zap.Error(err))
+		if rbErr := s.userRepo.Rollback(tx); rbErr != nil {
+			s.logger.Error("Failed to rollback transaction after failed commit", zap.Error(rbErr))
+		}
 		return err
 	}
 
