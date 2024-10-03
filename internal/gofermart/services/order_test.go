@@ -210,12 +210,41 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 		expectedLog string
 	}{
 		{
+			name: "LockOrderForProcessing_Success",
+			setupMocks: func() {
+				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
+					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
+				}, nil)
+				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
+				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
+				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				mockOrderRepo.EXPECT().UnlockOrder(gomock.Any(), "order123").Return(nil)
+				mockUserRepo.EXPECT().Commit(gomock.Any()).Return(nil)
+			},
+			expectedLog: `"msg":"Order processed successfully"`,
+		},
+		{
+			name: "LockOrderForProcessing_Error",
+			setupMocks: func() {
+				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
+					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
+				}, nil)
+				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(errors.New("failed to lock order"))
+				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil)
+			},
+			expectedLog: `"msg":"Failed to lock order for processing"`,
+		},
+		{
 			name: "Successful_Order_Processing",
 			setupMocks: func() {
 				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
 					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
 				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
 				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
@@ -248,6 +277,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
 				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
 				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
@@ -263,7 +293,20 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
 				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(0.0, domain.OrderStatusNew, errors.New("accrual error"))
+				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(errors.New("failed to rollback transaction"))
+			},
+			expectedLog: `"msg":"Failed to rollback transaction"`,
+		},
+		{
+			name: "Failed_To_Rollback_Transaction_After_LockOrder_Error",
+			setupMocks: func() {
+				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
+					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
+				}, nil)
+				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(errors.New("failed to lock order for processing"))
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(errors.New("failed to rollback transaction"))
 			},
 			expectedLog: `"msg":"Failed to rollback transaction"`,
@@ -275,7 +318,8 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
-				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusNew, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
+				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
 				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(errors.New("failed to update order"))
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil)
 			},
@@ -285,9 +329,10 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 			name: "Failed_To_Update_User_Balance",
 			setupMocks: func() {
 				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
-					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
+					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusProcessed},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
 				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
 				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("failed to update user balance"))
@@ -302,6 +347,7 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusProcessed},
 				}, nil)
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
+				mockOrderRepo.EXPECT().LockOrderForProcessing(gomock.Any(), "order123").Return(nil)
 				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(100.0, domain.OrderStatusProcessed, nil)
 				mockOrderRepo.EXPECT().UpdateOrder(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
@@ -309,18 +355,6 @@ func TestOrderService_UpdateOrderStatuses(t *testing.T) {
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil)
 			},
 			expectedLog: `"msg":"Failed to unlock order"`,
-		},
-		{
-			name: "Order_Processing_Failure",
-			setupMocks: func() {
-				mockOrderRepo.EXPECT().GetOrdersForProcessing(gomock.Any()).Return([]domain.Order{
-					{OrderNumber: "order123", UserID: 1, OrderStatus: domain.OrderStatusNew},
-				}, nil)
-				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
-				mockAccrualClient.EXPECT().GetOrderAccrual(gomock.Any(), "order123").Return(0.0, domain.OrderStatusNew, errors.New("accrual error"))
-				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil)
-			},
-			expectedLog: `"msg":"Failed to fetch order accrual"`,
 		},
 	}
 

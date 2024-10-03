@@ -110,6 +110,16 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 			continue
 		}
 
+		// Блокируем заказ для обработки, устанавливаем processing = TRUE
+		err = s.orderRepo.LockOrderForProcessing(tx, order.OrderNumber)
+		if err != nil {
+			s.logger.Error("Failed to lock order for processing", zap.String("order", order.OrderNumber), zap.Error(err))
+			if err := s.userRepo.Rollback(tx); err != nil {
+				s.logger.Error("Failed to rollback transaction", zap.Error(err))
+			}
+			continue
+		}
+
 		success := s.processOrder(ctx, order, tx)
 
 		if success {
