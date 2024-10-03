@@ -42,8 +42,8 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 			name: "Successful_Order_Response",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return([]domain.Order{
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any(), gomock.Any()).Return([]domain.Order{
 					{
 						OrderNumber: "123",
 						OrderStatus: domain.OrderStatusProcessed,
@@ -66,8 +66,8 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 			name: "No_Orders",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return([]domain.Order{}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any(), gomock.Any()).Return([]domain.Order{}, nil)
 			},
 			expectedStatusCode: http.StatusNoContent,
 		},
@@ -75,8 +75,8 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 			name: "Internal_Server_Error",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any()).Return(nil, errors.New("database error"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrdersByUserID(gomock.Any(), gomock.Any()).Return(nil, errors.New("database error"))
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 		},

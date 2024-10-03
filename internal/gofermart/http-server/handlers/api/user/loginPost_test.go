@@ -42,7 +42,7 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 			name:        "Authentication_Error",
 			requestBody: `{"login": "user1", "password": "wrong_password"}`,
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, errors.New("db error"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(nil, errors.New("db error"))
 			},
 			expectedStatusCode:   http.StatusInternalServerError,
 			expectedResponseBody: "Server error\n",
@@ -51,7 +51,7 @@ func TestLoginPostHandler_ServeHTTP(t *testing.T) {
 			name:        "Invalid_Login_Or_Password",
 			requestBody: `{"login": "user1", "password": "wrong_password"}`,
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{Login: "user1", Password: "hashed_password"}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{Login: "user1", Password: "hashed_password"}, nil)
 			},
 			expectedStatusCode:   http.StatusUnauthorized,
 			expectedResponseBody: "Invalid login/password\n",

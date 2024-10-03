@@ -8,6 +8,7 @@ import (
 	domain "beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	context "context"
 	gomock "github.com/golang/mock/gomock"
+	gorm "gorm.io/gorm"
 	reflect "reflect"
 )
 
@@ -76,15 +77,15 @@ func (mr *MockOrderServiceInterfaceMockRecorder) UpdateOrderStatuses(ctx interfa
 }
 
 // UpdateUserBalance mocks base method.
-func (m *MockOrderServiceInterface) UpdateUserBalance(userID int, amount float64) error {
+func (m *MockOrderServiceInterface) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUserBalance", userID, amount)
+	ret := m.ctrl.Call(m, "UpdateUserBalance", tx, userID, amount)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateUserBalance indicates an expected call of UpdateUserBalance.
-func (mr *MockOrderServiceInterfaceMockRecorder) UpdateUserBalance(userID, amount interface{}) *gomock.Call {
+func (mr *MockOrderServiceInterfaceMockRecorder) UpdateUserBalance(tx, userID, amount interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserBalance", reflect.TypeOf((*MockOrderServiceInterface)(nil).UpdateUserBalance), userID, amount)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserBalance", reflect.TypeOf((*MockOrderServiceInterface)(nil).UpdateUserBalance), tx, userID, amount)
 }

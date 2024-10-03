@@ -32,7 +32,7 @@ func TestOrderService_AddOrder(t *testing.T) {
 			login:       "user1",
 			orderNumber: "123456789",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(nil, gofermartErrors.ErrUserNotFound)
 			},
 			expectedError: gofermartErrors.ErrUserNotFound,
 		},
@@ -41,8 +41,8 @@ func TestOrderService_AddOrder(t *testing.T) {
 			login:       "user1",
 			orderNumber: "123456789",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrderByNumber("123456789").Return(&domain.Order{UserID: 1}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrderByNumber(gomock.Any(), "123456789").Return(&domain.Order{UserID: 1}, nil)
 			},
 			expectedError: gofermartErrors.ErrOrderAlreadyUploaded,
 		},
@@ -51,8 +51,8 @@ func TestOrderService_AddOrder(t *testing.T) {
 			login:       "user1",
 			orderNumber: "123456789",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrderByNumber("123456789").Return(&domain.Order{UserID: 2}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrderByNumber(gomock.Any(), "123456789").Return(&domain.Order{UserID: 2}, nil)
 			},
 			expectedError: gofermartErrors.ErrOrderUploadedByAnother,
 		},
@@ -61,9 +61,9 @@ func TestOrderService_AddOrder(t *testing.T) {
 			login:       "user1",
 			orderNumber: "123456789",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrderByNumber("123456789").Return(nil, gofermartErrors.ErrOrderNotFound)
-				mockOrderRepo.EXPECT().AddOrder(gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrderByNumber(gomock.Any(), "123456789").Return(nil, gofermartErrors.ErrOrderNotFound)
+				mockOrderRepo.EXPECT().AddOrder(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedError: nil,
 		},
@@ -72,9 +72,9 @@ func TestOrderService_AddOrder(t *testing.T) {
 			login:       "user1",
 			orderNumber: "123456789",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{UserID: 1}, nil)
-				mockOrderRepo.EXPECT().GetOrderByNumber("123456789").Return(nil, gofermartErrors.ErrOrderNotFound)
-				mockOrderRepo.EXPECT().AddOrder(gomock.Any()).Return(errors.New("db error"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1}, nil)
+				mockOrderRepo.EXPECT().GetOrderByNumber(gomock.Any(), "123456789").Return(nil, gofermartErrors.ErrOrderNotFound)
+				mockOrderRepo.EXPECT().AddOrder(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
 			},
 			expectedError: errors.New("db error"),
 		},

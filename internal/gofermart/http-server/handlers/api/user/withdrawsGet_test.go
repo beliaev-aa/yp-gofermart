@@ -43,8 +43,8 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 			name: "GetWithdrawals_Error",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin("user").Return(&domain.User{UserID: 1}, nil)
-				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(1).Return(nil, errors.New("db error"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user").Return(&domain.User{UserID: 1}, nil)
+				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(gomock.Any(), 1).Return(nil, errors.New("db error"))
 			},
 			expectedStatusCode:   http.StatusInternalServerError,
 			expectedResponseBody: "Internal Server Error\n",
@@ -53,8 +53,8 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 			name: "No_Content",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin("user").Return(&domain.User{UserID: 1}, nil)
-				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(1).Return([]domain.Withdrawal{}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user").Return(&domain.User{UserID: 1}, nil)
+				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(gomock.Any(), 1).Return([]domain.Withdrawal{}, nil)
 			},
 			expectedStatusCode:   http.StatusNoContent,
 			expectedResponseBody: "",
@@ -63,8 +63,8 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 			name: "Successful_Response",
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin("user").Return(&domain.User{UserID: 1}, nil)
-				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(1).Return([]domain.Withdrawal{
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user").Return(&domain.User{UserID: 1}, nil)
+				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(gomock.Any(), 1).Return([]domain.Withdrawal{
 					{
 						OrderNumber: "123456789",
 						Amount:      100.50,

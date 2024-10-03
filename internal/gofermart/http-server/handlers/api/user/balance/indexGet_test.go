@@ -41,7 +41,7 @@ func TestIndexGetHandler_ServeHTTP(t *testing.T) {
 			name: "Internal_Server_Error_On_GetBalance",
 			mockSetup: func(mockUserRepo *mocks.MockUserRepository, mockExtractor *mocks.MockUsernameExtractor) {
 				mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserBalance(gomock.Any()).Return(nil, errors.New("failed to get balance"))
+				mockUserRepo.EXPECT().GetUserBalance(gomock.Any(), gomock.Any()).Return(nil, errors.New("failed to get balance"))
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedBody:       "Failed to get balance\n",
@@ -50,7 +50,7 @@ func TestIndexGetHandler_ServeHTTP(t *testing.T) {
 			name: "Successful_Balance_Response",
 			mockSetup: func(mockUserRepo *mocks.MockUserRepository, mockExtractor *mocks.MockUsernameExtractor) {
 				mockExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserBalance(gomock.Any()).Return(&domain.UserBalance{
+				mockUserRepo.EXPECT().GetUserBalance(gomock.Any(), gomock.Any()).Return(&domain.UserBalance{
 					Current:   100.50,
 					Withdrawn: 50.75,
 				}, nil)

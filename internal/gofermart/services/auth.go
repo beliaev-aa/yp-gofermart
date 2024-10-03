@@ -29,7 +29,7 @@ func NewAuthService(jwtSecret []byte, userRepo repository.UserRepository, logger
 func (s *AuthService) RegisterUser(login, password string) error {
 	s.logger.Info("Attempting to register user", zap.String("login", login))
 
-	user, _ := s.userRepo.GetUserByLogin(login)
+	user, _ := s.userRepo.GetUserByLogin(nil, login)
 	if user != nil {
 		s.logger.Warn("Login already taken", zap.String("login", login))
 		return gofermartErrors.ErrLoginAlreadyExists
@@ -42,7 +42,7 @@ func (s *AuthService) RegisterUser(login, password string) error {
 	}
 
 	url := &domain.User{Login: login, Password: string(hashedPassword)}
-	err = s.userRepo.SaveUser(*url)
+	err = s.userRepo.SaveUser(nil, *url)
 	if err != nil {
 		s.logger.Error("Error registering user", zap.String("login", login), zap.Error(err))
 		return err
@@ -55,7 +55,7 @@ func (s *AuthService) RegisterUser(login, password string) error {
 func (s *AuthService) AuthenticateUser(login, password string) (bool, error) {
 	s.logger.Info("Attempting to authenticate user", zap.String("login", login))
 
-	user, err := s.userRepo.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
 		if errors.Is(err, gofermartErrors.ErrUserNotFound) {
 			s.logger.Warn("User not found", zap.String("login", login))

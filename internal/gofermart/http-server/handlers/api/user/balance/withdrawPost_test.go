@@ -8,6 +8,7 @@ import (
 	"errors"
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,7 +55,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			requestBody: `{"Order": "", "Sum": 0.0}`,
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{UserID: 1}, nil)
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   "Internal Server Error\n",
@@ -73,7 +74,7 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			requestBody: `{"Order": "79927398713", "Sum": 150.00}`,
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{UserID: 1}, nil)
 			},
 			expectedStatusCode: http.StatusPaymentRequired,
 			expectedResponse:   "Insufficient funds\n",
@@ -83,9 +84,13 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1, Balance: 400}, nil)
-				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(nil)
-				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "test_user").Return(&domain.User{UserID: 1, Balance: 400}, nil)
+				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil).AnyTimes()
+				mockUserRepo.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
+				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse:   "",
@@ -95,8 +100,10 @@ func TestWithdrawPostHandler_ServeHTTP(t *testing.T) {
 			requestBody: `{"Order": "79927398713", "Sum": 100.50}`,
 			setupMocks: func() {
 				mockUsernameExtractor.EXPECT().ExtractUsernameFromContext(gomock.Any(), gomock.Any()).Return("test_user", nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{UserID: 1, Balance: 400}, nil)
-				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any()).Return(errors.New("internal Server Error"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "test_user").Return(&domain.User{UserID: 1, Balance: 400}, nil)
+				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil).AnyTimes()
+				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
+				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(errors.New("internal Server Error"))
 			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   "Internal Server Error\n",

@@ -43,7 +43,7 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 			Name:        "Registration_Conflict",
 			RequestBody: `{"login": "user1", "password": "password123"}`,
 			SetupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(&domain.User{Login: "user1"}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{Login: "user1"}, nil)
 			},
 			ExpectedStatusCode:   http.StatusConflict,
 			ExpectedResponseBody: "login already exist\n",
@@ -52,8 +52,8 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 			Name:        "Registration_Server_Error",
 			RequestBody: `{"login": "user1", "password": "password123"}`,
 			SetupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
-				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(errors.New("db error")) // Добавлено ожидание вызова SaveUser
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(nil, gofermartErrors.ErrUserNotFound)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any(), gomock.Any()).Return(errors.New("db error")) // Добавлено ожидание вызова SaveUser
 			},
 			ExpectedStatusCode:   http.StatusInternalServerError,
 			ExpectedResponseBody: "Server error\n",
@@ -62,8 +62,8 @@ func TestRegisterPostHandler_ServeHTTP(t *testing.T) {
 			Name:        "Successful_Registration",
 			RequestBody: `{"login": "user1", "password": "password123"}`,
 			SetupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin("user1").Return(nil, gofermartErrors.ErrUserNotFound)
-				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(nil, gofermartErrors.ErrUserNotFound)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			ExpectedStatusCode: http.StatusOK,
 			ExpectedAuthHeader: "Bearer ",

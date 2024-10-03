@@ -28,7 +28,7 @@ func NewUserService(userRepo repository.UserRepository, withdrawalRepo repositor
 // GetBalance возвращает текущий баланс пользователя по его логину
 func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 	// Получаем баланс пользователя и сумму снятых средств из хранилища
-	userBalance, err := s.userRepo.GetUserBalance(login)
+	userBalance, err := s.userRepo.GetUserBalance(nil, login)
 	if err != nil {
 		s.logger.Error("Failed to get user balance", zap.Error(err))
 		return nil, err
@@ -40,7 +40,7 @@ func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 // Withdraw обрабатывает запрос на вывод средств для указанного пользователя и заказа
 func (s *UserService) Withdraw(login, order string, sum float64) error {
 	// Получаем информацию о пользователе по логину
-	user, err := s.userRepo.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
 		s.logger.Error("Failed to get user", zap.Error(err))
 		return err
@@ -64,15 +64,41 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 		ProcessedAt: time.Now(), // Время обработки вывода
 	}
 
+	tx, err := s.userRepo.BeginTransaction()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			err := s.userRepo.Rollback(tx)
+			if err != nil {
+				s.logger.Error("Failed to rollback", zap.Error(err))
+				return
+			}
+			panic(p)
+		} else if err != nil {
+			err := s.userRepo.Rollback(tx)
+			if err != nil {
+				s.logger.Error("Failed to rollback", zap.Error(err))
+				return
+			}
+		} else {
+			err = s.userRepo.Commit(tx)
+			if err != nil {
+				s.logger.Error("Failed to commit transaction", zap.Error(err))
+			}
+		}
+	}()
+
 	// Добавляем информацию о выводе в хранилище
-	err = s.withdrawalRepo.AddWithdrawal(withdrawal)
+	err = s.withdrawalRepo.AddWithdrawal(tx, withdrawal)
 	if err != nil {
 		s.logger.Error("Failed to add withdrawal", zap.Error(err))
 		return err
 	}
 
 	// Обновляем баланс пользователя в хранилище
-	err = s.userRepo.UpdateUserBalance(user.UserID, -sum) // Уменьшаем баланс
+	err = s.userRepo.UpdateUserBalance(tx, user.UserID, -sum) // Уменьшаем баланс
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
 		return err
@@ -84,7 +110,7 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 // GetWithdrawals возвращает список всех выводов средств пользователя по его логину
 func (s *UserService) GetWithdrawals(login string) ([]domain.Withdrawal, error) {
 	// Получаем информацию о пользователе по логину
-	user, err := s.userRepo.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
 		// Проверяем, если пользователь не найден, возвращаем соответствующую ошибку
 		if errors.Is(err, gofermartErrors.ErrUserNotFound) {
@@ -96,7 +122,7 @@ func (s *UserService) GetWithdrawals(login string) ([]domain.Withdrawal, error) 
 	}
 
 	// Получаем список всех выводов средств пользователя
-	withdrawals, err := s.withdrawalRepo.GetWithdrawalsByUserID(user.UserID)
+	withdrawals, err := s.withdrawalRepo.GetWithdrawalsByUserID(nil, user.UserID)
 	if err != nil {
 		s.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err

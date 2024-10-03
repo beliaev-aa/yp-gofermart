@@ -8,6 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 	"testing"
 )
 
@@ -50,8 +51,8 @@ func TestRegisterUser(t *testing.T) {
 		{
 			name: "RegisterUser_Success",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(nil, nil)
-				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(nil, nil)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expectedError: nil,
 			login:         "new_user",
@@ -60,7 +61,7 @@ func TestRegisterUser(t *testing.T) {
 		{
 			name: "RegisterUser_LoginAlreadyExists",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(&domain.User{Login: "new_user"}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(&domain.User{Login: "new_user"}, nil)
 			},
 			expectedError: gofermartErrors.ErrLoginAlreadyExists,
 			login:         "new_user",
@@ -69,8 +70,8 @@ func TestRegisterUser(t *testing.T) {
 		{
 			name: "RegisterUser_SaveUserError",
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).Return(nil, nil)
-				mockUserRepo.EXPECT().SaveUser(gomock.Any()).Return(errors.New("failed to save user"))
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).Return(nil, nil)
+				mockUserRepo.EXPECT().SaveUser(gomock.Any(), gomock.Any()).Return(errors.New("failed to save user"))
 			},
 			expectedError: errors.New("failed to save user"),
 			login:         "new_user",
@@ -107,7 +108,7 @@ func TestAuthenticateUser(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		mockReturn    func(login string) (*domain.User, error)
+		mockReturn    func(tx *gorm.DB, login string) (*domain.User, error)
 		login         string
 		password      string
 		expectedAuth  bool
@@ -115,7 +116,7 @@ func TestAuthenticateUser(t *testing.T) {
 	}{
 		{
 			name: "AuthenticateUser_Success",
-			mockReturn: func(login string) (*domain.User, error) {
+			mockReturn: func(tx *gorm.DB, login string) (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: string(hashedPassword)}, nil
 			},
 			login:         "test_user",
@@ -125,7 +126,7 @@ func TestAuthenticateUser(t *testing.T) {
 		},
 		{
 			name: "AuthenticateUser_UserNotFound",
-			mockReturn: func(login string) (*domain.User, error) {
+			mockReturn: func(tx *gorm.DB, login string) (*domain.User, error) {
 				return nil, gofermartErrors.ErrUserNotFound
 			},
 			login:         "test_user",
@@ -135,7 +136,7 @@ func TestAuthenticateUser(t *testing.T) {
 		},
 		{
 			name: "AuthenticateUser_LoginNotFound",
-			mockReturn: func(login string) (*domain.User, error) {
+			mockReturn: func(tx *gorm.DB, login string) (*domain.User, error) {
 				return nil, nil
 			},
 			login:         "test_user",
@@ -145,7 +146,7 @@ func TestAuthenticateUser(t *testing.T) {
 		},
 		{
 			name: "AuthenticateUser_InvalidPassword",
-			mockReturn: func(login string) (*domain.User, error) {
+			mockReturn: func(tx *gorm.DB, login string) (*domain.User, error) {
 				return &domain.User{Login: "test_user", Password: string(hashedPassword)}, nil
 			},
 			login:         "test_user",
@@ -155,7 +156,7 @@ func TestAuthenticateUser(t *testing.T) {
 		},
 		{
 			name: "AuthenticateUser_GetUserError",
-			mockReturn: func(login string) (*domain.User, error) {
+			mockReturn: func(tx *gorm.DB, login string) (*domain.User, error) {
 				return nil, errors.New("db error")
 			},
 			login:         "test_user",
@@ -167,7 +168,7 @@ func TestAuthenticateUser(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockUserRepo.EXPECT().GetUserByLogin(gomock.Any()).DoAndReturn(tc.mockReturn)
+			mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), gomock.Any()).DoAndReturn(tc.mockReturn)
 
 			authService := NewAuthService(jwtSecret, mockUserRepo, logger)
 

@@ -7,8 +7,12 @@ import (
 )
 
 type WithdrawalRepository interface {
-	AddWithdrawal(withdrawal domain.Withdrawal) error
-	GetWithdrawalsByUserID(userID int) ([]domain.Withdrawal, error)
+	AddWithdrawal(tx *gorm.DB, withdrawal domain.Withdrawal) error
+	GetWithdrawalsByUserID(tx *gorm.DB, userID int) ([]domain.Withdrawal, error)
+
+	BeginTransaction() (*gorm.DB, error)
+	Commit(tx *gorm.DB) error
+	Rollback(tx *gorm.DB) error
 }
 
 type WithdrawalRepositoryPostgres struct {
@@ -22,9 +26,9 @@ func NewWithdrawalRepository(db *gorm.DB, logger *zap.Logger) WithdrawalReposito
 }
 
 // AddWithdrawal — добавление записи о выводе средств
-func (w *WithdrawalRepositoryPostgres) AddWithdrawal(withdrawal domain.Withdrawal) error {
+func (w *WithdrawalRepositoryPostgres) AddWithdrawal(tx *gorm.DB, withdrawal domain.Withdrawal) error {
 	w.logger.Info("Adding withdrawal", zap.Int("userID", withdrawal.UserID), zap.String("order", withdrawal.OrderNumber))
-	err := w.db.Create(&withdrawal).Error
+	err := w.getDB(tx).Create(&withdrawal).Error
 	if err != nil {
 		w.logger.Error("Failed to add withdrawal", zap.Error(err))
 		return err
@@ -34,10 +38,10 @@ func (w *WithdrawalRepositoryPostgres) AddWithdrawal(withdrawal domain.Withdrawa
 }
 
 // GetWithdrawalsByUserID — получение списка выводов пользователя
-func (w *WithdrawalRepositoryPostgres) GetWithdrawalsByUserID(userID int) ([]domain.Withdrawal, error) {
+func (w *WithdrawalRepositoryPostgres) GetWithdrawalsByUserID(tx *gorm.DB, userID int) ([]domain.Withdrawal, error) {
 	w.logger.Info("Getting withdrawals for user", zap.Int("userID", userID))
 	var withdrawals []domain.Withdrawal
-	err := w.db.Where("user_id = ?", userID).Order("processed_at desc").Find(&withdrawals).Error
+	err := w.getDB(tx).Where("user_id = ?", userID).Order("processed_at desc").Find(&withdrawals).Error
 	if err != nil {
 		w.logger.Error("Failed to get withdrawals", zap.Error(err))
 		return nil, err

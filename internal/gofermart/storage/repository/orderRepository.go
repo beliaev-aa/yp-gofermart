@@ -11,13 +11,17 @@ import (
 )
 
 type OrderRepository interface {
-	AddOrder(order domain.Order) error
-	GetOrderByNumber(number string) (*domain.Order, error)
-	GetOrdersByUserID(userID int) ([]domain.Order, error)
-	GetOrdersForProcessing() ([]domain.Order, error)
-	LockOrderForProcessing(orderNumber string) error
-	UnlockOrder(orderNumber string) error
-	UpdateOrder(order domain.Order) error
+	AddOrder(tx *gorm.DB, order domain.Order) error
+	GetOrderByNumber(tx *gorm.DB, number string) (*domain.Order, error)
+	GetOrdersByUserID(tx *gorm.DB, userID int) ([]domain.Order, error)
+	GetOrdersForProcessing(tx *gorm.DB) ([]domain.Order, error)
+	LockOrderForProcessing(tx *gorm.DB, orderNumber string) error
+	UnlockOrder(tx *gorm.DB, orderNumber string) error
+	UpdateOrder(tx *gorm.DB, order domain.Order) error
+
+	BeginTransaction() (*gorm.DB, error)
+	Commit(tx *gorm.DB) error
+	Rollback(tx *gorm.DB) error
 }
 
 type OrderRepositoryPostgres struct {
@@ -31,11 +35,11 @@ func NewOrderRepository(db *gorm.DB, logger *zap.Logger) OrderRepository {
 }
 
 // AddOrder — добавление нового заказа
-func (o *OrderRepositoryPostgres) AddOrder(order domain.Order) error {
+func (o *OrderRepositoryPostgres) AddOrder(tx *gorm.DB, order domain.Order) error {
 	o.logger.Info("Adding new order", zap.String("order_number", order.OrderNumber), zap.Int("userID", order.UserID))
 
 	// Использование OnConflict для игнорирования дублирующихся заказов
-	err := o.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&order).Error
+	err := o.getDB(tx).Clauses(clause.OnConflict{DoNothing: true}).Create(&order).Error
 	if err != nil {
 		var pgErr *pgconn.PgError
 		// Проверка, является ли ошибка ошибкой Postgres
@@ -54,10 +58,10 @@ func (o *OrderRepositoryPostgres) AddOrder(order domain.Order) error {
 }
 
 // GetOrderByNumber — получение заказа по номеру
-func (o *OrderRepositoryPostgres) GetOrderByNumber(number string) (*domain.Order, error) {
+func (o *OrderRepositoryPostgres) GetOrderByNumber(tx *gorm.DB, number string) (*domain.Order, error) {
 	o.logger.Info("Getting order by number", zap.String("order_number", number))
 	var order domain.Order
-	err := o.db.Where("order_number = ?", number).First(&order).Error
+	err := o.getDB(tx).Where("order_number = ?", number).First(&order).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			o.logger.Warn("Order not found", zap.String("order_number", number))
@@ -71,10 +75,10 @@ func (o *OrderRepositoryPostgres) GetOrderByNumber(number string) (*domain.Order
 }
 
 // GetOrdersByUserID — получение списка заказов пользователя
-func (o *OrderRepositoryPostgres) GetOrdersByUserID(userID int) ([]domain.Order, error) {
+func (o *OrderRepositoryPostgres) GetOrdersByUserID(tx *gorm.DB, userID int) ([]domain.Order, error) {
 	o.logger.Info("Getting orders for user", zap.Int("userID", userID))
 	var orders []domain.Order
-	err := o.db.Where("user_id = ?", userID).Order("uploaded_at desc").Find(&orders).Error
+	err := o.getDB(tx).Where("user_id = ?", userID).Order("uploaded_at desc").Find(&orders).Error
 	if err != nil {
 		o.logger.Error("Failed to get orders", zap.Error(err))
 		return nil, err
@@ -84,10 +88,10 @@ func (o *OrderRepositoryPostgres) GetOrdersByUserID(userID int) ([]domain.Order,
 }
 
 // GetOrdersForProcessing — получение заказов для обработки
-func (o *OrderRepositoryPostgres) GetOrdersForProcessing() ([]domain.Order, error) {
+func (o *OrderRepositoryPostgres) GetOrdersForProcessing(tx *gorm.DB) ([]domain.Order, error) {
 	var orders []domain.Order
 	// Получение заказов со статусом для обработки
-	err := o.db.Where("order_status IN ? AND is_processing = ?", []string{
+	err := o.getDB(tx).Where("order_status IN ? AND is_processing = ?", []string{
 		domain.OrderStatusNew, domain.OrderStatusRegistered, domain.OrderStatusProcessing}, false).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Find(&orders).Error
@@ -99,8 +103,8 @@ func (o *OrderRepositoryPostgres) GetOrdersForProcessing() ([]domain.Order, erro
 }
 
 // LockOrderForProcessing — блокировка заказа для обработки
-func (o *OrderRepositoryPostgres) LockOrderForProcessing(orderNumber string) error {
-	err := o.db.Model(&domain.Order{}).
+func (o *OrderRepositoryPostgres) LockOrderForProcessing(tx *gorm.DB, orderNumber string) error {
+	err := o.getDB(tx).Model(&domain.Order{}).
 		Where("order_number = ?", orderNumber).
 		Update("is_processing", true).Error
 	if err != nil {
@@ -110,8 +114,8 @@ func (o *OrderRepositoryPostgres) LockOrderForProcessing(orderNumber string) err
 }
 
 // UnlockOrder — разблокировка заказа
-func (o *OrderRepositoryPostgres) UnlockOrder(orderNumber string) error {
-	err := o.db.Model(&domain.Order{}).
+func (o *OrderRepositoryPostgres) UnlockOrder(tx *gorm.DB, orderNumber string) error {
+	err := o.getDB(tx).Model(&domain.Order{}).
 		Where("order_number = ?", orderNumber).
 		Update("is_processing", false).Error
 	if err != nil {
@@ -121,9 +125,9 @@ func (o *OrderRepositoryPostgres) UnlockOrder(orderNumber string) error {
 }
 
 // UpdateOrder — обновление данных о заказе
-func (o *OrderRepositoryPostgres) UpdateOrder(order domain.Order) error {
+func (o *OrderRepositoryPostgres) UpdateOrder(tx *gorm.DB, order domain.Order) error {
 	o.logger.Info("Updating order", zap.String("order_number", order.OrderNumber))
-	err := o.db.Model(&domain.Order{}).Where("order_number = ?", order.OrderNumber).Updates(domain.Order{
+	err := o.getDB(tx).Model(&domain.Order{}).Where("order_number = ?", order.OrderNumber).Updates(domain.Order{
 		OrderStatus: order.OrderStatus,
 		Accrual:     order.Accrual,
 	}).Error

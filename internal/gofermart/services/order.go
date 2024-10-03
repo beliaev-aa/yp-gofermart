@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -15,7 +16,7 @@ type OrderServiceInterface interface {
 	AddOrder(login, number string) error
 	GetOrders(login string) ([]domain.Order, error)
 	UpdateOrderStatuses(ctx context.Context)
-	UpdateUserBalance(userID int, amount float64) error
+	UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error
 }
 
 // OrderService - представляет сервис для работы с заказами.
@@ -39,13 +40,13 @@ func NewOrderService(accrualClient AccrualService, orderRepo repository.OrderRep
 // AddOrder - добавляет новый заказ, проверяя, не был ли он уже добавлен другим пользователем.
 func (s *OrderService) AddOrder(login, number string) error {
 	// Получаем пользователя по логину
-	user, err := s.userRepo.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
 		return err
 	}
 
 	// Проверяем, был ли уже добавлен заказ с таким номером
-	existingOrder, err := s.orderRepo.GetOrderByNumber(number)
+	existingOrder, err := s.orderRepo.GetOrderByNumber(nil, number)
 	if err != nil && !errors.Is(err, gofermartErrors.ErrOrderNotFound) {
 		return err
 	}
@@ -67,7 +68,7 @@ func (s *OrderService) AddOrder(login, number string) error {
 		UploadedAt:  time.Now(),
 	}
 
-	err = s.orderRepo.AddOrder(order)
+	err = s.orderRepo.AddOrder(nil, order)
 	if err != nil {
 		return err
 	}
@@ -77,12 +78,12 @@ func (s *OrderService) AddOrder(login, number string) error {
 
 // GetOrders - возвращает список заказов пользователя.
 func (s *OrderService) GetOrders(login string) ([]domain.Order, error) {
-	user, err := s.userRepo.GetUserByLogin(login)
+	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
 		return nil, err
 	}
 
-	orders, err := s.orderRepo.GetOrdersByUserID(user.UserID)
+	orders, err := s.orderRepo.GetOrdersByUserID(nil, user.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +96,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 	s.logger.Info("Starting order status update")
 
 	// Получаем заказы, которые не обрабатываются (processing = FALSE)
-	orders, err := s.orderRepo.GetOrdersForProcessing()
+	orders, err := s.orderRepo.GetOrdersForProcessing(nil)
 	if err != nil {
 		s.logger.Error("Failed to fetch orders for status update", zap.Error(err))
 		return
@@ -103,7 +104,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 
 	for _, order := range orders {
 		// Блокируем заказ для обработки, устанавливаем processing = TRUE
-		err := s.orderRepo.LockOrderForProcessing(order.OrderNumber)
+		err := s.orderRepo.LockOrderForProcessing(nil, order.OrderNumber)
 		if err != nil {
 			s.logger.Error("Failed to lock order for processing", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
@@ -113,7 +114,7 @@ func (s *OrderService) UpdateOrderStatuses(ctx context.Context) {
 		s.processOrder(ctx, order)
 
 		// Снимаем блокировку после завершения обработки заказа (processing = FALSE)
-		err = s.orderRepo.UnlockOrder(order.OrderNumber)
+		err = s.orderRepo.UnlockOrder(nil, order.OrderNumber)
 		if err != nil {
 			s.logger.Error("Failed to unlock order", zap.String("order", order.OrderNumber), zap.Error(err))
 			continue
@@ -132,14 +133,41 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
 	order.OrderStatus = status
 	order.Accrual = accrual
 
-	err = s.orderRepo.UpdateOrder(order)
+	tx, err := s.userRepo.BeginTransaction()
+	if err != nil {
+		s.logger.Error("Failed to start transaction", zap.Error(err))
+		return
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			err := s.userRepo.Rollback(tx)
+			if err != nil {
+				s.logger.Error("Failed to rollback", zap.Error(err))
+				return
+			}
+			panic(p)
+		} else if err != nil {
+			err := s.userRepo.Rollback(tx)
+			if err != nil {
+				s.logger.Error("Failed to rollback", zap.Error(err))
+				return
+			}
+		} else {
+			err = s.userRepo.Commit(tx)
+			if err != nil {
+				s.logger.Error("Failed to commit transaction", zap.Error(err))
+			}
+		}
+	}()
+
+	err = s.orderRepo.UpdateOrder(tx, order)
 	if err != nil {
 		s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
 		return
 	}
 
 	if status == domain.OrderStatusProcessed {
-		err = s.UpdateUserBalance(order.UserID, accrual)
+		err = s.UpdateUserBalance(tx, order.UserID, accrual)
 		if err != nil {
 			s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
 			return
@@ -148,8 +176,8 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order) {
 }
 
 // UpdateUserBalance - обновляет баланс пользователя.
-func (s *OrderService) UpdateUserBalance(userID int, amount float64) error {
-	err := s.userRepo.UpdateUserBalance(userID, amount)
+func (s *OrderService) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
+	err := s.userRepo.UpdateUserBalance(tx, userID, amount)
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Int("userID", userID), zap.Error(err))
 		return err

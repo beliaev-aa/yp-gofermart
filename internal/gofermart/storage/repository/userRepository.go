@@ -10,10 +10,14 @@ import (
 )
 
 type UserRepository interface {
-	GetUserBalance(login string) (*domain.UserBalance, error)
-	GetUserByLogin(login string) (*domain.User, error)
-	SaveUser(user domain.User) error
-	UpdateUserBalance(userID int, amount float64) error
+	GetUserBalance(tx *gorm.DB, login string) (*domain.UserBalance, error)
+	GetUserByLogin(tx *gorm.DB, login string) (*domain.User, error)
+	SaveUser(tx *gorm.DB, user domain.User) error
+	UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error
+
+	BeginTransaction() (*gorm.DB, error)
+	Commit(tx *gorm.DB) error
+	Rollback(tx *gorm.DB) error
 }
 
 type UserRepositoryPostgres struct {
@@ -27,10 +31,10 @@ func NewUserRepository(db *gorm.DB, logger *zap.Logger) UserRepository {
 }
 
 // GetUserBalance — получение баланса и общей суммы выводов пользователя
-func (u *UserRepositoryPostgres) GetUserBalance(login string) (userBalance *domain.UserBalance, err error) {
+func (u *UserRepositoryPostgres) GetUserBalance(tx *gorm.DB, login string) (userBalance *domain.UserBalance, err error) {
 	var result *domain.UserBalance
 	// Получение баланса пользователя и общей суммы выводов через Join
-	err = u.db.Table("users").
+	err = u.getDB(tx).Table("users").
 		Select("users.balance AS current, COALESCE(SUM(withdrawals.amount), 0) AS withdrawn").
 		Joins("LEFT JOIN withdrawals ON users.user_id = withdrawals.user_id").
 		Where("users.login = ?", login).
@@ -49,10 +53,10 @@ func (u *UserRepositoryPostgres) GetUserBalance(login string) (userBalance *doma
 }
 
 // GetUserByLogin — получение пользователя по логину
-func (u *UserRepositoryPostgres) GetUserByLogin(login string) (*domain.User, error) {
+func (u *UserRepositoryPostgres) GetUserByLogin(tx *gorm.DB, login string) (*domain.User, error) {
 	u.logger.Info("Getting user by login", zap.String("login", login))
 	var user domain.User
-	err := u.db.Where("login = ?", login).First(&user).Error
+	err := u.getDB(tx).Where("login = ?", login).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			u.logger.Warn("User not found", zap.String("login", login))
@@ -66,9 +70,9 @@ func (u *UserRepositoryPostgres) GetUserByLogin(login string) (*domain.User, err
 }
 
 // SaveUser — сохранение нового пользователя
-func (u *UserRepositoryPostgres) SaveUser(user domain.User) error {
+func (u *UserRepositoryPostgres) SaveUser(tx *gorm.DB, user domain.User) error {
 	u.logger.Info("Saving new user", zap.String("login", user.Login))
-	err := u.db.Create(&user).Error
+	err := u.getDB(tx).Create(&user).Error
 	if err != nil {
 		var pgErr *pq.Error
 		// Проверка на ошибку уникальности (уникальный логин)
@@ -84,10 +88,10 @@ func (u *UserRepositoryPostgres) SaveUser(user domain.User) error {
 }
 
 // UpdateUserBalance — обновление баланса пользователя
-func (u *UserRepositoryPostgres) UpdateUserBalance(userID int, amount float64) error {
+func (u *UserRepositoryPostgres) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
 	u.logger.Info("Updating user balance", zap.Int("userID", userID), zap.Float64("amount", amount))
 	// Увеличение баланса пользователя
-	err := u.db.Model(&domain.User{}).Where("user_id = ?", userID).Update("balance", gorm.Expr("balance + ?", amount)).Error
+	err := u.getDB(tx).Model(&domain.User{}).Where("user_id = ?", userID).Update("balance", gorm.Expr("balance + ?", amount)).Error
 	if err != nil {
 		u.logger.Error("Failed to update user balance", zap.Error(err))
 		return err
