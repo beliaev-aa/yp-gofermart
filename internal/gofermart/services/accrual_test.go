@@ -87,9 +87,9 @@ func TestGetOrderAccrual(t *testing.T) {
 			orderNumber:     "999999",
 			mockStatusCode:  http.StatusOK,
 			mockResponse:    `{"order":"999999","status":"UNKNOWN","accrual":50.0}`,
-			expectedAccrual: 50.0,
-			expectedStatus:  domain.OrderStatusProcessing,
-			expectedError:   nil,
+			expectedAccrual: 0,
+			expectedStatus:  "",
+			expectedError:   errors.New("received unknown order status from the accrual system"),
 		},
 		{
 			name:            "Failed_to_Create_New_Request",

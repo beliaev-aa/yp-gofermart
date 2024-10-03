@@ -5,6 +5,7 @@ import (
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"context"
 	"encoding/json"
+	"errors"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -74,19 +75,13 @@ func (s *RealAccrualService) GetOrderAccrual(ctx context.Context, orderNumber st
 		return 0, "", err
 	}
 
-	// Определяем статус заказа
-	var status string
 	switch result.Status {
-	case "REGISTERED", "PROCESSING":
-		status = domain.OrderStatusProcessing
-	case "INVALID":
-		status = domain.OrderStatusInvalid
-	case "PROCESSED":
-		status = domain.OrderStatusProcessed
+	case "REGISTERED", "PROCESSING", "INVALID", "PROCESSED":
+		// Возвращаем статус как есть
 	default:
-		s.logger.Warn("Unknown order status from accrual system", zap.String("status", result.Status))
-		status = domain.OrderStatusProcessing
+		s.logger.Error("Received unknown order status from the accrual system", zap.String("status", result.Status))
+		return 0, "", errors.New("received unknown order status from the accrual system")
 	}
 
-	return result.Accrual, status, nil
+	return result.Accrual, result.Status, nil
 }
