@@ -6,6 +6,7 @@ import (
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
 	"github.com/golang/mock/gomock"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -67,7 +68,7 @@ func TestWithdrawalsGetHandler_ServeHTTP(t *testing.T) {
 				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(gomock.Any(), 1).Return([]domain.Withdrawal{
 					{
 						OrderNumber: "123456789",
-						Amount:      100.50,
+						Amount:      decimal.NewFromFloat(100.50),
 						ProcessedAt: time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC),
 					},
 				}, nil)

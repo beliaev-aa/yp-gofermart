@@ -7,9 +7,11 @@ package mocks
 import (
 	domain "beliaev-aa/yp-gofermart/internal/gofermart/domain"
 	context "context"
-	gomock "github.com/golang/mock/gomock"
-	gorm "gorm.io/gorm"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	decimal "github.com/shopspring/decimal"
+	gorm "gorm.io/gorm"
 )
 
 // MockOrderServiceInterface is a mock of OrderServiceInterface interface.
@@ -77,7 +79,7 @@ func (mr *MockOrderServiceInterfaceMockRecorder) UpdateOrderStatuses(ctx interfa
 }
 
 // UpdateUserBalance mocks base method.
-func (m *MockOrderServiceInterface) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
+func (m *MockOrderServiceInterface) UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserBalance", tx, userID, amount)
 	ret0, _ := ret[0].(error)

@@ -6,9 +6,11 @@ package mocks
 
 import (
 	domain "beliaev-aa/yp-gofermart/internal/gofermart/domain"
-	gomock "github.com/golang/mock/gomock"
-	gorm "gorm.io/gorm"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	decimal "github.com/shopspring/decimal"
+	gorm "gorm.io/gorm"
 )
 
 // MockUserRepository is a mock of UserRepository interface.
@@ -122,7 +124,7 @@ func (mr *MockUserRepositoryMockRecorder) SaveUser(tx, user interface{}) *gomock
 }
 
 // UpdateUserBalance mocks base method.
-func (m *MockUserRepository) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
+func (m *MockUserRepository) UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateUserBalance", tx, userID, amount)
 	ret0, _ := ret[0].(error)

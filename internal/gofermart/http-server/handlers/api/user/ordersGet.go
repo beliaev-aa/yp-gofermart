@@ -64,7 +64,8 @@ func (h *OrdersGetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			UploadedAt: order.UploadedAt.Format(time.RFC3339),
 		}
 		if order.OrderStatus == domain.OrderStatusProcessed {
-			item.Accrual = order.Accrual
+			floatAccrual, _ := order.Accrual.Float64()
+			item.Accrual = floatAccrual
 		}
 		response = append(response, item)
 	}

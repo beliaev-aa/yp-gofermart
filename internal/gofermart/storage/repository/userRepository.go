@@ -5,6 +5,7 @@ import (
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"errors"
 	"github.com/lib/pq"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -13,7 +14,7 @@ type UserRepository interface {
 	GetUserBalance(tx *gorm.DB, login string) (*domain.UserBalance, error)
 	GetUserByLogin(tx *gorm.DB, login string) (*domain.User, error)
 	SaveUser(tx *gorm.DB, user domain.User) error
-	UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error
+	UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error
 
 	BeginTransaction() (*gorm.DB, error)
 	Commit(tx *gorm.DB) error
@@ -88,8 +89,8 @@ func (u *UserRepositoryPostgres) SaveUser(tx *gorm.DB, user domain.User) error {
 }
 
 // UpdateUserBalance — обновление баланса пользователя
-func (u *UserRepositoryPostgres) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
-	u.logger.Info("Updating user balance", zap.Int("userID", userID), zap.Float64("amount", amount))
+func (u *UserRepositoryPostgres) UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error {
+	u.logger.Info("Updating user balance", zap.Int("userID", userID), zap.String("amount", amount.String()))
 	// Увеличение баланса пользователя
 	err := u.getDB(tx).Model(&domain.User{}).Where("user_id = ?", userID).Update("balance", gorm.Expr("balance + ?", amount)).Error
 	if err != nil {

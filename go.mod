@@ -9,6 +9,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/lib/pq v1.10.9
+	github.com/shopspring/decimal v1.4.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.27.0
 	gorm.io/driver/postgres v1.5.9

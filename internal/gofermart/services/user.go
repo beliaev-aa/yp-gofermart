@@ -5,6 +5,7 @@ import (
 	gofermartErrors "beliaev-aa/yp-gofermart/internal/gofermart/errors"
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"errors"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"time"
 )
@@ -38,7 +39,7 @@ func (s *UserService) GetBalance(login string) (*domain.UserBalance, error) {
 }
 
 // Withdraw обрабатывает запрос на вывод средств для указанного пользователя и заказа
-func (s *UserService) Withdraw(login, order string, sum float64) error {
+func (s *UserService) Withdraw(login, order string, sum decimal.Decimal) error {
 	// Получаем информацию о пользователе по логину
 	user, err := s.userRepo.GetUserByLogin(nil, login)
 	if err != nil {
@@ -47,12 +48,12 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 	}
 
 	// Проверка на отрицательную сумму при выводе средств
-	if sum <= 0 {
+	if sum.LessThan(decimal.NewFromInt(0)) {
 		return gofermartErrors.ErrInvalidWithdrawalAmount
 	}
 
 	// Проверяем, достаточно ли средств для вывода
-	if user.Balance < sum {
+	if user.Balance.LessThan(sum) {
 		return gofermartErrors.ErrInsufficientFunds
 	}
 
@@ -80,7 +81,7 @@ func (s *UserService) Withdraw(login, order string, sum float64) error {
 		return err
 	}
 
-	err = s.userRepo.UpdateUserBalance(tx, user.UserID, -sum)
+	err = s.userRepo.UpdateUserBalance(tx, user.UserID, sum.Neg())
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Error(err))
 		if rbErr := s.userRepo.Rollback(tx); rbErr != nil {

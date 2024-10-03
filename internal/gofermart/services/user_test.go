@@ -6,6 +6,8 @@ import (
 	"beliaev-aa/yp-gofermart/tests/mocks"
 	"errors"
 	"github.com/golang/mock/gomock"
+	"github.com/google/go-cmp/cmp"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
@@ -84,7 +86,7 @@ func TestUserService_Withdraw(t *testing.T) {
 		name          string
 		login         string
 		order         string
-		sum           float64
+		sum           decimal.Decimal
 		setupMocks    func()
 		expectedError error
 	}{
@@ -92,12 +94,12 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Success",
 			login: "user1",
 			order: "order123",
-			sum:   50.0,
+			sum:   decimal.NewFromFloat(50.0),
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
 				mockUserRepo.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 200.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(200.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			},
@@ -107,9 +109,9 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Insufficient_Funds",
 			login: "user1",
 			order: "order123",
-			sum:   150.0,
+			sum:   decimal.NewFromFloat(150.0),
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 			},
 			expectedError: gofermartErrors.ErrInsufficientFunds,
 		},
@@ -117,9 +119,9 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Invalid_Amount",
 			login: "user1",
 			order: "order123",
-			sum:   -10.0,
+			sum:   decimal.NewFromFloat(-10.0),
 			setupMocks: func() {
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 			},
 			expectedError: gofermartErrors.ErrInvalidWithdrawalAmount,
 		},
@@ -127,11 +129,11 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Add_Withdrawal_Error",
 			login: "user1",
 			order: "order123",
-			sum:   50.0,
+			sum:   decimal.NewFromFloat(50.0),
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
 			},
 			expectedError: errors.New("db error"),
@@ -140,7 +142,7 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Fail_Get_User_By_Login",
 			login: "user1",
 			order: "order123",
-			sum:   -10.0,
+			sum:   decimal.NewFromFloat(-10.0),
 			setupMocks: func() {
 				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(nil, gofermartErrors.ErrUserNotFound)
 			},
@@ -150,12 +152,12 @@ func TestUserService_Withdraw(t *testing.T) {
 			name:  "Withdraw_Fail_Update_User_Balance",
 			login: "user1",
 			order: "order123",
-			sum:   50.0,
+			sum:   decimal.NewFromFloat(50.0),
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
 				mockUserRepo.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 200.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(200.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("update user balance fail"))
 			},
@@ -202,14 +204,14 @@ func TestUserService_GetWithdrawals(t *testing.T) {
 			setupMocks: func() {
 				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1}, nil)
 				mockWithdrawalRepo.EXPECT().GetWithdrawalsByUserID(gomock.Any(), 1).Return([]domain.Withdrawal{
-					{OrderNumber: "order123", Amount: 50.0, ProcessedAt: time.Now()},
-					{OrderNumber: "order456", Amount: 100.0, ProcessedAt: time.Now()},
+					{OrderNumber: "order123", Amount: decimal.NewFromFloat(50.0), ProcessedAt: time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)},
+					{OrderNumber: "order456", Amount: decimal.NewFromFloat(100.0), ProcessedAt: time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)},
 				}, nil)
 			},
 			expectedError: nil,
 			expectedResult: []domain.Withdrawal{
-				{OrderNumber: "order123", Amount: 50.0},
-				{OrderNumber: "order456", Amount: 100.0},
+				{OrderNumber: "order123", Amount: decimal.NewFromFloat(50.0), ProcessedAt: time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)},
+				{OrderNumber: "order456", Amount: decimal.NewFromFloat(100.0), ProcessedAt: time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)},
 			},
 		},
 		{
@@ -256,14 +258,8 @@ func TestUserService_GetWithdrawals(t *testing.T) {
 				t.Errorf("Expected error %v, got %v", tc.expectedError, err)
 			}
 
-			if len(result) != len(tc.expectedResult) {
-				t.Errorf("Expected result length %d, got %d", len(tc.expectedResult), len(result))
-			} else {
-				for i := range result {
-					if result[i].OrderNumber != tc.expectedResult[i].OrderNumber || result[i].Amount != tc.expectedResult[i].Amount {
-						t.Errorf("Expected result %v, got %v", tc.expectedResult, result)
-					}
-				}
+			if diff := cmp.Diff(tc.expectedResult, result); diff != "" {
+				t.Errorf("Unexpected result (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -291,7 +287,7 @@ func TestUserService_Withdraw_TransactionHandling(t *testing.T) {
 			name: "Begin_Transaction_Error",
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(nil, errors.New("failed to begin transaction"))
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 			},
 			expectedError: errors.New("failed to begin transaction"),
 			expectedLog:   "Failed to begin transaction",
@@ -300,7 +296,7 @@ func TestUserService_Withdraw_TransactionHandling(t *testing.T) {
 			name: "Rollback_Failure_On_AddWithdrawal_Error",
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(errors.New("add withdrawal error"))
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(errors.New("rollback error"))
 			},
@@ -311,7 +307,7 @@ func TestUserService_Withdraw_TransactionHandling(t *testing.T) {
 			name: "Rollback_Failure_On_UpdateUserBalance_Error",
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 100.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(100.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("update user balance error"))
 				mockUserRepo.EXPECT().Rollback(gomock.Any()).Return(errors.New("rollback error"))
@@ -323,7 +319,7 @@ func TestUserService_Withdraw_TransactionHandling(t *testing.T) {
 			name: "Commit_Failure",
 			setupMocks: func() {
 				mockUserRepo.EXPECT().BeginTransaction().Return(&gorm.DB{}, nil)
-				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: 200.0}, nil)
+				mockUserRepo.EXPECT().GetUserByLogin(gomock.Any(), "user1").Return(&domain.User{UserID: 1, Balance: decimal.NewFromFloat(200.0)}, nil)
 				mockWithdrawalRepo.EXPECT().AddWithdrawal(gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().UpdateUserBalance(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 				mockUserRepo.EXPECT().Commit(gomock.Any()).Return(errors.New("commit error"))
@@ -338,7 +334,7 @@ func TestUserService_Withdraw_TransactionHandling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupMocks()
 
-			err := userService.Withdraw("user1", "order123", 50.0)
+			err := userService.Withdraw("user1", "order123", decimal.NewFromFloat(50.0))
 
 			if err != nil && tc.expectedError == nil {
 				t.Errorf("Expected no error, got %v", err)

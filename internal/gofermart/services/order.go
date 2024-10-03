@@ -6,6 +6,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/storage/repository"
 	"context"
 	"errors"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"time"
@@ -16,7 +17,7 @@ type OrderServiceInterface interface {
 	AddOrder(login, number string) error
 	GetOrders(login string) ([]domain.Order, error)
 	UpdateOrderStatuses(ctx context.Context)
-	UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error
+	UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error
 }
 
 // OrderService - представляет сервис для работы с заказами.
@@ -142,8 +143,9 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order, tx 
 		return false
 	}
 
+	decimalAccrual := decimal.NewFromFloat(accrual)
 	order.OrderStatus = status
-	order.Accrual = accrual
+	order.Accrual = decimalAccrual
 
 	if err := s.orderRepo.UpdateOrder(tx, order); err != nil {
 		s.logger.Error("Failed to update order", zap.String("order", order.OrderNumber), zap.Error(err))
@@ -151,7 +153,7 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order, tx 
 	}
 
 	if status == domain.OrderStatusProcessed {
-		if err := s.UpdateUserBalance(tx, order.UserID, accrual); err != nil {
+		if err := s.UpdateUserBalance(tx, order.UserID, decimalAccrual); err != nil {
 			s.logger.Error("Failed to update user balance", zap.Int("userID", order.UserID), zap.Error(err))
 			return false
 		}
@@ -169,7 +171,7 @@ func (s *OrderService) processOrder(ctx context.Context, order domain.Order, tx 
 }
 
 // UpdateUserBalance - обновляет баланс пользователя.
-func (s *OrderService) UpdateUserBalance(tx *gorm.DB, userID int, amount float64) error {
+func (s *OrderService) UpdateUserBalance(tx *gorm.DB, userID int, amount decimal.Decimal) error {
 	err := s.userRepo.UpdateUserBalance(tx, userID, amount)
 	if err != nil {
 		s.logger.Error("Failed to update user balance", zap.Int("userID", userID), zap.Error(err))

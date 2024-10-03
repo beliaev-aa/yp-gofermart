@@ -6,6 +6,7 @@ import (
 	"beliaev-aa/yp-gofermart/internal/gofermart/utils"
 	"encoding/json"
 	"errors"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -54,7 +55,7 @@ func (h *WithdrawPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = h.userService.Withdraw(login, req.Order, req.Sum)
+	err = h.userService.Withdraw(login, req.Order, decimal.NewFromFloat(req.Sum))
 	if err != nil {
 		switch {
 		case errors.Is(err, gofermartErrors.ErrInsufficientFunds):

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,7 @@ func TestOrdersGetHandler_ServeHTTP(t *testing.T) {
 					{
 						OrderNumber: "123",
 						OrderStatus: domain.OrderStatusProcessed,
-						Accrual:     150.5,
+						Accrual:     decimal.NewFromFloat(150.5),
 						UploadedAt:  time.Now(),
 					},
 				}, nil)
