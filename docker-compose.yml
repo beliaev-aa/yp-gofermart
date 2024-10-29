@@ -1,0 +1,68 @@
+services:
+  gophermart:
+    container_name: gofermart
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.gophermart
+    depends_on:
+      - db
+      - accrual
+    environment:
+      - DSN=${GOPHERMART_DSN}
+      - R=http://accrual:${ACCRUAL_PORT}
+      - A=0.0.0.0:${GOPHERMART_PORT}
+    ports:
+      - "${GOPHERMART_PORT}:${GOPHERMART_PORT}"
+    volumes:
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: ["./gophermart", "-d", "${GOPHERMART_DSN}", "-r", "http://accrual:${ACCRUAL_PORT}", "-a", "0.0.0.0:${GOPHERMART_PORT}"]
+    networks:
+      - default
+
+  wait:
+    image: dokku/wait
+    depends_on:
+      - db
+    command: ["db:${POSTGRES_PORT}"]
+
+  accrual:
+    container_name: gofermart-accrual
+    platform: linux/amd64
+    image: debian:bullseye-slim
+    volumes:
+      - ${ACCRUAL_BIN}:/app/accrual:ro
+    working_dir: /app
+    ports:
+      - "${ACCRUAL_PORT}:${ACCRUAL_PORT}"
+    command: [ "./accrual", "-a", ":${ACCRUAL_PORT}", "-d", "${ACCRUAL_DSN}" ]
+    environment:
+      - DSN=${ACCRUAL_DSN}
+    networks:
+      - default
+
+  db:
+    container_name: gofermart-db
+    image: postgres:12.1-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+volumes:
+  pg_data:
+
+networks:
+  default:
+    driver: bridge
